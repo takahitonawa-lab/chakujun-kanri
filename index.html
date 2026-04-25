@@ -43,18 +43,9 @@
         <div class="bg-gray-800 rounded-xl p-4 mb-4">
             <p class="text-[10px] text-gray-400 mb-2 uppercase tracking-wider">累計</p>
             <div class="grid grid-cols-3 gap-2">
-                <div class="text-center">
-                    <p class="text-[10px] text-gray-400">来店回数</p>
-                    <p id="total-visits" class="text-xl font-black text-white">0</p>
-                </div>
-                <div class="text-center border-x border-gray-700">
-                    <p class="text-[10px] text-gray-400">平均着順</p>
-                    <p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p>
-                </div>
-                <div class="text-center">
-                    <p class="text-[10px] text-gray-400">累計収支</p>
-                    <p id="overall-profit" class="text-xl font-black text-green-400">±0円</p>
-                </div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">来店回数</p><p id="total-visits" class="text-xl font-black text-white">0</p></div>
+                <div class="text-center border-x border-gray-700"><p class="text-[10px] text-gray-400">平均着順</p><p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p></div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">累計収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
             </div>
         </div>
         <button onclick="startVisit()" class="w-full bg-yellow-500 text-black font-black py-5 rounded-2xl text-xl shadow-lg active:scale-95 transition-transform mb-4">来店開始</button>
@@ -75,8 +66,14 @@
             <div id="start-park-selectors" class="grid grid-cols-2 gap-2"></div>
         </div>
         <div class="bg-gray-800 rounded-xl p-4 mb-6">
-            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">麻雀財布の残高（入店時）</label>
-            <input type="number" id="visit-start-balance" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="例: 10000">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">入店時残高</label>
+            <input type="number" id="visit-start-balance" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="10000">
+            <div class="grid grid-cols-4 gap-2">
+                <button onclick="adjustBalance('start', -10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-red-400">-10,000</button>
+                <button onclick="adjustBalance('start', -1000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-red-400">-1,000</button>
+                <button onclick="adjustBalance('start', 1000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+1,000</button>
+                <button onclick="adjustBalance('start', 10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+10,000</button>
+            </div>
         </div>
         <button onclick="confirmStartVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">記録を開始する</button>
     </div>
@@ -91,28 +88,25 @@
             <button onclick="endVisit()" class="text-xs bg-red-800 px-3 py-2 rounded font-bold">退店</button>
         </div>
         <div class="bg-gray-800 rounded-xl p-4 mb-4">
-            <div class="grid grid-cols-3 gap-2">
-                <div class="text-center">
-                    <p class="text-[10px] text-gray-400">平均着順</p>
-                    <p id="visit-avg-rank" class="text-2xl font-black text-yellow-500">-</p>
-                </div>
-                <div class="text-center border-x border-gray-700">
-                    <p class="text-[10px] text-gray-400">対局数</p>
-                    <p id="visit-total-games" class="text-2xl font-black text-white">0</p>
-                </div>
-                <div class="text-center">
-                    <p class="text-[10px] text-gray-400">消費コスト</p>
-                    <p id="visit-total-pts" class="text-2xl font-black text-orange-500">0</p>
-                </div>
+            <div class="grid grid-cols-3 gap-2 mb-3">
+                <div class="text-center"><p class="text-[10px] text-gray-400">平均着順</p><p id="visit-avg-rank" class="text-2xl font-black text-yellow-500">-</p></div>
+                <div class="text-center border-x border-gray-700"><p class="text-[10px] text-gray-400">対局数</p><p id="visit-total-games" class="text-2xl font-black text-white">0</p></div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p id="visit-total-pts" class="text-2xl font-black text-orange-500">0</p></div>
             </div>
-            <div class="mt-3 flex items-center justify-between bg-gray-900 p-2 rounded-lg">
-                <div>
+            <!-- 追加チャージ -->
+            <div class="bg-gray-900 p-3 rounded-lg">
+                <div class="flex justify-between items-center mb-2">
                     <p class="text-[9px] text-gray-500 uppercase">追加チャージ</p>
-                    <p id="visit-charge-display" class="font-mono font-bold text-yellow-500 text-sm">0円</p>
+                    <div class="flex items-center gap-2">
+                        <p id="visit-charge-display" class="font-mono font-bold text-yellow-500 text-sm">0円</p>
+                        <button onclick="resetVisitCharge()" class="bg-gray-700 text-gray-400 text-[9px] py-1 px-2 rounded">Clear</button>
+                    </div>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="addVisitCharge()" class="bg-yellow-600 text-white text-[10px] font-bold py-2 px-3 rounded active:scale-95">+ 追加</button>
-                    <button onclick="resetVisitCharge()" class="bg-gray-700 text-gray-400 text-[10px] py-2 px-2 rounded">Clear</button>
+                <div class="grid grid-cols-4 gap-1">
+                    <button onclick="adjustCharge(-10000)" class="bg-gray-700 py-2 rounded text-[10px] font-bold text-red-400">-10,000</button>
+                    <button onclick="adjustCharge(-1000)" class="bg-gray-700 py-2 rounded text-[10px] font-bold text-red-400">-1,000</button>
+                    <button onclick="adjustCharge(1000)" class="bg-gray-700 py-2 rounded text-[10px] font-bold text-green-400">+1,000</button>
+                    <button onclick="adjustCharge(10000)" class="bg-gray-700 py-2 rounded text-[10px] font-bold text-green-400">+10,000</button>
                 </div>
             </div>
         </div>
@@ -144,9 +138,15 @@
             </div>
         </div>
         <div class="bg-gray-800 rounded-xl p-4 mb-4">
-            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">麻雀財布の残高（退店時）</label>
-            <input type="number" id="visit-end-balance" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="例: 8000">
-            <div class="mt-3 flex justify-between items-center">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">退店時残高</label>
+            <input type="number" id="visit-end-balance" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="0">
+            <div class="grid grid-cols-4 gap-2 mb-3">
+                <button onclick="adjustBalance('end', -10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-red-400">-10,000</button>
+                <button onclick="adjustBalance('end', -1000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-red-400">-1,000</button>
+                <button onclick="adjustBalance('end', 1000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+1,000</button>
+                <button onclick="adjustBalance('end', 10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+10,000</button>
+            </div>
+            <div class="flex justify-between items-center">
                 <p class="text-[10px] text-gray-400">今日の収支</p>
                 <p id="end-profit" class="text-xl font-black text-green-400">-</p>
             </div>
@@ -188,17 +188,18 @@
             { id: 1, name: 'パークB', base: 300, p1: 0, p4: 100 }
         ];
         let selectedParkId = 0;
-        let currentVisit = null;
+        let currentVisit = null; // Supabaseに保存済みのvisitオブジェクト
         let currentRecords = [];
         let visits = [];
+        let lastStartBalance = 10000; // 前回の入店時残高
 
         async function init() {
             showView('loading-view');
             const { data: { session } } = await sb.auth.getSession();
-            if (session) { currentUser = session.user; await loadData(); showView('home-view'); }
+            if (session) { currentUser = session.user; await loadData(); }
             else showView('login-view');
             sb.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) { currentUser = session.user; await loadData(); showView('home-view'); }
+                if (event === 'SIGNED_IN' && session) { currentUser = session.user; await loadData(); }
                 else if (event === 'SIGNED_OUT') { currentUser = null; showView('login-view'); }
             });
         }
@@ -212,21 +213,31 @@
             const { data: cfg } = await sb.from('configs').select('*').eq('user_id', currentUser.id).single();
             if (cfg) {
                 parkConfigs = cfg.park_configs || parkConfigs;
-                if (cfg.current_visit) {
-                    currentVisit = cfg.current_visit;
-                    const { data: recs } = await sb.from('records').select('*').eq('visit_id', currentVisit.id).order('created_at', { ascending: true });
-                    currentRecords = recs || [];
+                lastStartBalance = cfg.last_start_balance || 10000;
+                if (cfg.current_visit_id) {
+                    const { data: v } = await sb.from('visits').select('*').eq('id', cfg.current_visit_id).single();
+                    if (v && !v.ended_at) {
+                        currentVisit = v;
+                        const { data: recs } = await sb.from('records').select('*').eq('visit_id', v.id).order('created_at', { ascending: true });
+                        currentRecords = recs || [];
+                    }
                 }
             }
-            const { data: vs } = await sb.from('visits').select('*').eq('user_id', currentUser.id).order('started_at', { ascending: false });
+            const { data: vs } = await sb.from('visits').select('*').eq('user_id', currentUser.id).not('ended_at', 'is', null).order('started_at', { ascending: false });
             visits = vs || [];
             renderHome();
             if (currentVisit) { showView('record-view'); renderRecordView(); }
+            else showView('home-view');
         }
 
-        async function saveConfigs() {
+        async function saveConfigs(extra = {}) {
             await sb.from('configs').upsert({
-                user_id: currentUser.id, park_configs: parkConfigs, current_visit: currentVisit, updated_at: new Date().toISOString()
+                user_id: currentUser.id,
+                park_configs: parkConfigs,
+                current_visit_id: currentVisit?.id || null,
+                last_start_balance: lastStartBalance,
+                updated_at: new Date().toISOString(),
+                ...extra
             }, { onConflict: 'user_id' });
         }
 
@@ -242,6 +253,33 @@
             const t = document.getElementById('toast');
             t.innerText = msg; t.style.opacity = '1'; t.style.transform = 'translate(-50%, 20px)';
             setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translate(-50%, -10px)'; }, 2000);
+        }
+
+        // 残高調整ボタン
+        function adjustBalance(type, delta) {
+            const id = type === 'start' ? 'visit-start-balance' : 'visit-end-balance';
+            const input = document.getElementById(id);
+            const current = parseInt(input.value) || 0;
+            input.value = Math.max(0, current + delta);
+            if (type === 'end') calcEndProfit();
+        }
+
+        function adjustCharge(delta) {
+            if (!currentVisit) return;
+            currentVisit.charge_total = Math.max(0, (currentVisit.charge_total || 0) + delta);
+            updateVisitCharge();
+        }
+
+        async function updateVisitCharge() {
+            await sb.from('visits').update({ charge_total: currentVisit.charge_total }).eq('id', currentVisit.id);
+            updateRecordUI();
+            if (currentVisit.charge_total !== 0) showToast(`チャージ合計: ${currentVisit.charge_total.toLocaleString()}円`);
+        }
+
+        async function resetVisitCharge() {
+            if (!confirm('チャージ記録をリセットしますか？')) return;
+            currentVisit.charge_total = 0;
+            await updateVisitCharge();
         }
 
         function renderHome() {
@@ -274,7 +312,7 @@
             if (currentVisit) { showView('record-view'); renderRecordView(); return; }
             selectedParkId = parkConfigs[0]?.id || 0;
             renderStartParkSelectors();
-            document.getElementById('visit-start-balance').value = '';
+            document.getElementById('visit-start-balance').value = lastStartBalance;
             showView('start-visit-view');
         }
 
@@ -292,12 +330,22 @@
 
         async function confirmStartVisit() {
             const park = parkConfigs.find(p => p.id === selectedParkId) || parkConfigs[0];
-            currentVisit = {
-                id: `visit_${Date.now()}`, user_id: currentUser.id,
-                park_name: park.name, park_config: park,
-                start_balance: parseInt(document.getElementById('visit-start-balance').value) || 0,
-                charge_total: 0, started_at: new Date().toISOString()
-            };
+            const startBal = parseInt(document.getElementById('visit-start-balance').value) || 0;
+            lastStartBalance = startBal;
+
+            // まずSupabaseにvisitを保存してUUIDを取得
+            const { data: newVisit, error } = await sb.from('visits').insert({
+                user_id: currentUser.id,
+                park_name: park.name,
+                park_config: park,
+                start_balance: startBal,
+                charge_total: 0,
+                started_at: new Date().toISOString()
+            }).select().single();
+
+            if (error || !newVisit) { showToast('エラーが発生しました'); return; }
+
+            currentVisit = newVisit;
             currentRecords = [];
             await saveConfigs();
             showView('record-view');
@@ -337,9 +385,13 @@
             if (rank === 1) pts += (park.p1 || 0);
             if (rank === 4) pts += (park.p4 || 0);
             const { data, error } = await sb.from('records').insert({
-                visit_id: currentVisit.id, user_id: currentUser.id, rank, pts, created_at: new Date().toISOString()
+                visit_id: currentVisit.id,
+                user_id: currentUser.id,
+                rank, pts,
+                created_at: new Date().toISOString()
             }).select().single();
             if (!error && data) { currentRecords.push(data); updateRecordUI(); }
+            else showToast('保存エラー: ' + (error?.message || ''));
         }
 
         async function undoRecord() {
@@ -348,20 +400,6 @@
             await sb.from('records').delete().eq('id', last.id);
             currentRecords.pop();
             updateRecordUI();
-        }
-
-        function addVisitCharge() {
-            const amt = parseInt(prompt('追加チャージ金額（円）') || '0');
-            if (!amt || isNaN(amt)) return;
-            currentVisit.charge_total = (currentVisit.charge_total || 0) + amt;
-            saveConfigs(); updateRecordUI();
-            showToast(`+${amt.toLocaleString()}円 チャージ`);
-        }
-
-        function resetVisitCharge() {
-            if (!confirm('チャージ記録をリセットしますか？')) return;
-            currentVisit.charge_total = 0;
-            saveConfigs(); updateRecordUI();
         }
 
         function endVisit() {
@@ -390,17 +428,15 @@
             const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
             const sumPts = currentRecords.reduce((s,r)=>s+r.pts,0);
             const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
-            const { data: saved } = await sb.from('visits').insert({
-                user_id: currentUser.id, park_name: currentVisit.park_name, park_config: currentVisit.park_config,
-                start_balance: currentVisit.start_balance, end_balance: endBal,
-                charge_total: currentVisit.charge_total||0, profit,
-                total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null,
-                total_pts: sumPts, memo, started_at: currentVisit.started_at, ended_at: new Date().toISOString()
-            }).select().single();
-            if (saved) {
-                await sb.from('records').update({ visit_id: saved.id }).eq('visit_id', currentVisit.id);
-                visits.unshift(saved);
-            }
+
+            await sb.from('visits').update({
+                end_balance: endBal, profit, total_games: totalGames,
+                avg_rank: totalGames > 0 ? sumRank/totalGames : null,
+                total_pts: sumPts, memo, ended_at: new Date().toISOString()
+            }).eq('id', currentVisit.id);
+
+            const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: sumPts, memo, ended_at: new Date().toISOString() };
+            visits.unshift(updatedVisit);
             currentVisit = null; currentRecords = [];
             await saveConfigs();
             renderHome(); showView('home-view');
