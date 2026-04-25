@@ -3,25 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雀レコ Pro - Custom Edition</title>
+    <title>着順管理 -ワンボタン記録-</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { background-color: #1a1a1a; color: #e5e5e5; font-family: sans-serif; }
         .active-park { border: 2px solid #eab308; background-color: #374151 !important; }
-        /* トーストアニメーション */
         #toast { transition: opacity 0.3s, transform 0.3s; }
     </style>
 </head>
 <body class="p-4 flex flex-col h-screen">
 
-    <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-6 py-2 rounded-full font-bold shadow-2xl opacity-0 pointer-events-none z-50">
-        +10,000 ptしました
+    <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-6 py-2 rounded-full font-bold shadow-2xl opacity-0 pointer-events-none z-50"></div>
+
+    <!-- ログイン画面 -->
+    <div id="login-view" class="hidden flex flex-col items-center justify-center h-full gap-6">
+        <h1 class="text-2xl font-bold text-yellow-500 tracking-widest">着順管理</h1>
+        <p class="text-gray-400 text-sm">ワンボタン記録</p>
+        <button onclick="signInWithGoogle()" class="bg-white text-gray-800 font-bold py-3 px-8 rounded-xl flex items-center gap-3 shadow-lg active:scale-95 transition-transform">
+            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Googleでログイン
+        </button>
     </div>
 
-    <div id="main-view" class="flex flex-col h-full">
+    <!-- メイン画面 -->
+    <div id="main-view" class="hidden flex flex-col h-full">
         <div class="text-center mb-4 flex justify-between items-center">
-            <h1 class="text-lg font-bold text-gray-500 tracking-widest">MAHJONG VIBES</h1>
-            <button onclick="toggleView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">⚙️ 設定</button>
+            <h1 class="text-lg font-bold text-gray-500 tracking-widest">着順管理</h1>
+            <div class="flex gap-2 items-center">
+                <button onclick="toggleView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">⚙️</button>
+                <button onclick="signOut()" class="text-xs bg-gray-700 px-3 py-1 rounded text-gray-400">ログアウト</button>
+            </div>
+        </div>
+
+        <!-- 期間フィルター -->
+        <div class="flex gap-2 mb-3 text-xs">
+            <button onclick="setFilter('today')" id="filter-today" class="flex-1 py-1 rounded bg-gray-700 text-gray-300">今日</button>
+            <button onclick="setFilter('month')" id="filter-month" class="flex-1 py-1 rounded bg-gray-700 text-gray-300">今月</button>
+            <button onclick="setFilter('all')" id="filter-all" class="flex-1 py-1 rounded bg-yellow-600 text-white">全期間</button>
         </div>
 
         <div class="bg-gray-800 rounded-xl p-4 shadow-lg mb-4">
@@ -39,7 +58,7 @@
                     <p id="total-points" class="text-2xl font-black text-orange-500">0</p>
                 </div>
             </div>
-            
+
             <div class="grid grid-cols-2 gap-4 items-end">
                 <div>
                     <label class="text-[10px] text-gray-400 block mb-1">現在の残高 (手入力)</label>
@@ -85,35 +104,127 @@
         </div>
     </div>
 
+    <!-- 設定画面 -->
     <div id="settings-view" class="hidden flex flex-col h-full overflow-y-auto">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-bold">パーク設定</h2>
             <button onclick="toggleView('main-view')" class="bg-green-600 px-4 py-1 rounded text-sm font-bold">完了</button>
         </div>
-        
         <div class="bg-gray-800 p-4 rounded-xl mb-6">
             <label class="text-[10px] text-gray-400 uppercase font-bold">開始時の持参残高 (初期値)</label>
             <input type="number" id="initial-balance-setting" onchange="saveConfigs()" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none" placeholder="例: 50000">
         </div>
-
         <div id="park-settings-list" class="space-y-6 mb-6"></div>
         <button onclick="addNewPark()" class="w-full py-4 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 font-bold">+ パークを追加</button>
     </div>
 
+    <!-- ローディング画面 -->
+    <div id="loading-view" class="flex flex-col items-center justify-center h-full gap-4">
+        <div class="text-yellow-500 text-4xl">⏳</div>
+        <p class="text-gray-400 text-sm">読み込み中...</p>
+    </div>
+
     <script>
-        // データ読み込み（チャージと開始残高を追加）
-        let records = JSON.parse(localStorage.getItem('mj-records-final') || '[]');
-        let chargeTotal = parseInt(localStorage.getItem('mj-charge-total') || '0');
-        let initialBalance = parseInt(localStorage.getItem('mj-initial-balance') || '0');
-        
-        let parkConfigs = JSON.parse(localStorage.getItem('mj-parks-final') || JSON.stringify([
+        const SUPABASE_URL = 'https://zxrmngokgjlaoszdkoix.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_oBTUmfUKUDsAwkZc-mUbbA_0cvDiEgu';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentUser = null;
+        let records = [];
+        let chargeTotal = 0;
+        let initialBalance = 0;
+        let currentFilter = 'all';
+        let parkConfigs = [
             { id: 0, name: 'パークA', base: 500, p1: 0, p4: 0 },
             { id: 1, name: 'パークB', base: 300, p1: 0, p4: 100 }
-        ]));
-        let currentParkId = parkConfigs[0] ? parkConfigs[0].id : 0;
+        ];
+        let currentParkId = 0;
 
-        // UI初期化
-        document.getElementById('initial-balance-setting').value = initialBalance;
+        // 初期化
+        async function init() {
+            showView('loading-view');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                currentUser = session.user;
+                await loadFromSupabase();
+                showView('main-view');
+            } else {
+                showView('login-view');
+            }
+
+            supabase.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    currentUser = session.user;
+                    await loadFromSupabase();
+                    showView('main-view');
+                } else if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                    records = [];
+                    showView('login-view');
+                }
+            });
+        }
+
+        async function signInWithGoogle() {
+            await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.href }
+            });
+        }
+
+        async function signOut() {
+            await supabase.auth.signOut();
+        }
+
+        // Supabaseからデータ読み込み
+        async function loadFromSupabase() {
+            if (!currentUser) return;
+
+            // レコード読み込み
+            const { data: recordsData } = await supabase
+                .from('records')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('created_at', { ascending: true });
+            records = recordsData || [];
+
+            // 設定読み込み
+            const { data: configData } = await supabase
+                .from('configs')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .single();
+
+            if (configData) {
+                chargeTotal = configData.charge_total || 0;
+                initialBalance = configData.initial_balance || 0;
+                parkConfigs = configData.park_configs || parkConfigs;
+                currentParkId = parkConfigs[0]?.id || 0;
+            }
+
+            document.getElementById('initial-balance-setting').value = initialBalance;
+            renderParkSelectors();
+            updateUI();
+        }
+
+        // Supabaseにconfig保存
+        async function saveToSupabase() {
+            if (!currentUser) return;
+            await supabase.from('configs').upsert({
+                user_id: currentUser.id,
+                charge_total: chargeTotal,
+                initial_balance: initialBalance,
+                park_configs: parkConfigs,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+        }
+
+        function showView(viewId) {
+            ['login-view', 'main-view', 'settings-view', 'loading-view'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+        }
 
         function showToast(message) {
             const toast = document.getElementById('toast');
@@ -126,27 +237,47 @@
             }, 2000);
         }
 
-        function addCharge(amount) {
-            chargeTotal += amount;
-            localStorage.setItem('mj-charge-total', chargeTotal);
-            showToast(`+${amount.toLocaleString()} ptしました`);
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['today', 'month', 'all'].forEach(f => {
+                const btn = document.getElementById(`filter-${f}`);
+                btn.className = `flex-1 py-1 rounded text-xs ${f === filter ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-300'}`;
+            });
             updateUI();
         }
 
-        function resetCharge() {
-            if(confirm('チャージ記録をリセットしますか？')) {
+        function getFilteredRecords() {
+            const now = new Date();
+            return records.filter(r => {
+                const d = new Date(r.created_at);
+                if (currentFilter === 'today') {
+                    return d.toDateString() === now.toDateString();
+                } else if (currentFilter === 'month') {
+                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                }
+                return true;
+            });
+        }
+
+        async function addCharge(amount) {
+            chargeTotal += amount;
+            showToast(`+${amount.toLocaleString()} ptしました`);
+            await saveToSupabase();
+            updateUI();
+        }
+
+        async function resetCharge() {
+            if (confirm('チャージ記録をリセットしますか？')) {
                 chargeTotal = 0;
-                localStorage.setItem('mj-charge-total', chargeTotal);
+                await saveToSupabase();
                 updateUI();
             }
         }
 
         function toggleView(viewId) {
-            document.getElementById('main-view').classList.add('hidden');
-            document.getElementById('settings-view').classList.add('hidden');
-            document.getElementById(viewId).classList.remove('hidden');
-            if(viewId === 'settings-view') renderSettings();
-            if(viewId === 'main-view') {
+            showView(viewId);
+            if (viewId === 'settings-view') renderSettings();
+            if (viewId === 'main-view') {
                 saveConfigs();
                 renderParkSelectors();
                 updateUI();
@@ -198,7 +329,6 @@
 
         function updatePark(index, field, value) {
             parkConfigs[index][field] = field === 'name' ? value : parseInt(value);
-            saveConfigs();
         }
 
         function addNewPark() {
@@ -207,86 +337,105 @@
         }
 
         function removePark(index) {
-            if(confirm('削除しますか？')) { parkConfigs.splice(index, 1); renderSettings(); }
+            if (confirm('削除しますか？')) { parkConfigs.splice(index, 1); renderSettings(); }
         }
 
-        function saveConfigs() { 
-            localStorage.setItem('mj-parks-final', JSON.stringify(parkConfigs)); 
+        async function saveConfigs() {
             initialBalance = parseInt(document.getElementById('initial-balance-setting').value) || 0;
-            localStorage.setItem('mj-initial-balance', initialBalance);
+            await saveToSupabase();
         }
 
-        function addRecord(rank) {
+        async function addRecord(rank) {
+            if (!currentUser) return;
             const park = parkConfigs.find(p => p.id === currentParkId) || parkConfigs[0];
-            let pts = (park ? park.base : 0);
+            let pts = park ? park.base : 0;
             if (rank === 1) pts += (park.p1 || 0);
             if (rank === 4) pts += (park.p4 || 0);
-            
-            const now = new Date();
-            const timeStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-            records.push({ rank, time: timeStr, parkName: park ? park.name : 'Unknown', pts });
-            updateUI();
+
+            const { data, error } = await supabase.from('records').insert({
+                user_id: currentUser.id,
+                rank,
+                park_name: park ? park.name : 'Unknown',
+                pts,
+                created_at: new Date().toISOString()
+            }).select().single();
+
+            if (!error && data) {
+                records.push(data);
+                updateUI();
+            }
         }
 
         function updateUI() {
+            const filtered = getFilteredRecords();
             const list = document.getElementById('history-list');
             let sumRank = 0; let sumPoints = 0;
             list.innerHTML = '';
-            records.slice().reverse().forEach(reg => {
+
+            filtered.slice().reverse().forEach(reg => {
                 const li = document.createElement('li');
                 li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${reg.rank === 1 ? 'border-red-600' : (reg.rank === 4 ? 'border-gray-500' : 'border-transparent')}`;
-                li.innerHTML = `<div><span class="font-bold">${reg.rank}着</span> <span class="text-[10px] text-gray-400 ml-1 font-normal">${reg.parkName}</span></div>
-                                <div class="text-right text-[10px] text-gray-500 font-mono">${reg.time}<br><span class="text-orange-400 font-bold">${reg.pts >= 0 ? '-' : '+'}${Math.abs(reg.pts)}pt</span></div>`;
+                const d = new Date(reg.created_at);
+                const timeStr = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+                li.innerHTML = `<div><span class="font-bold">${reg.rank}着</span> <span class="text-[10px] text-gray-400 ml-1 font-normal">${reg.park_name}</span></div>
+                                <div class="text-right text-[10px] text-gray-500 font-mono">${timeStr}<br><span class="text-orange-400 font-bold">${reg.pts >= 0 ? '-' : '+'}${Math.abs(reg.pts)}pt</span></div>`;
                 list.appendChild(li);
-                sumRank += reg.rank; sumPoints += reg.pts;
+                sumRank += reg.rank;
+                sumPoints += reg.pts;
             });
 
-            // 基本情報の更新
-            document.getElementById('avg-rank').innerText = records.length > 0 ? (sumRank/records.length).toFixed(2) : "0.00";
-            document.getElementById('total-games').innerText = records.length;
+            document.getElementById('avg-rank').innerText = filtered.length > 0 ? (sumRank / filtered.length).toFixed(2) : '0.00';
+            document.getElementById('total-games').innerText = filtered.length;
             document.getElementById('total-points').innerText = sumPoints;
             document.getElementById('charge-display').innerText = `${chargeTotal.toLocaleString()} pt`;
 
-            // 最終収支の計算
-            // 収支 = (今の残高 - 開始時の残高) - チャージ総額 + 獲得スコア
             const currentBalance = parseInt(document.getElementById('current-balance').value) || 0;
             const finalProfit = (currentBalance - initialBalance) - chargeTotal + sumPoints;
-            
             const profitEl = document.getElementById('final-profit');
             profitEl.innerText = `${finalProfit >= 0 ? '+' : ''}${finalProfit.toLocaleString()}`;
             profitEl.className = `text-xl font-bold ${finalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        }
 
-            localStorage.setItem('mj-records-final', JSON.stringify(records));
+        async function undo() {
+            if (!records.length) return;
+            if (!confirm('最新の記録を削除？')) return;
+            const last = records[records.length - 1];
+            await supabase.from('records').delete().eq('id', last.id);
+            records.pop();
+            updateUI();
+        }
+
+        async function clearAll() {
+            if (!confirm('データを全削除します。チャージ記録もリセットされますがよろしいですか？')) return;
+            await supabase.from('records').delete().eq('user_id', currentUser.id);
+            records = [];
+            chargeTotal = 0;
+            await saveToSupabase();
+            updateUI();
         }
 
         function downloadCSV() {
-            if(!records.length) return alert('データがありません');
+            const filtered = getFilteredRecords();
+            if (!filtered.length) return alert('データがありません');
             const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
             let totalPts = 0;
-            records.forEach(r => { counts[r.rank]++; totalPts += r.pts; });
-            let csv = "\uFEFF時間,パーク,着順,消費Pt\n" + records.map(r => `${r.time},${r.parkName},${r.rank},${r.pts}`).join("\n");
+            filtered.forEach(r => { counts[r.rank]++; totalPts += r.pts; });
+            let csv = '\uFEFF時間,パーク,着順,消費Pt\n' + filtered.map(r => {
+                const d = new Date(r.created_at);
+                const t = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+                return `${t},${r.park_name},${r.rank},${r.pts}`;
+            }).join('\n');
             csv += `\nチャージ総額,${chargeTotal}\n`;
-            csv += "1着,2着,3着,4着,合計Pt\n";
+            csv += '1着,2着,3着,4着,合計Pt\n';
             csv += `${counts[1]},${counts[2]},${counts[3]},${counts[4]},${totalPts}\n`;
-            const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `mj_log_${new Date().toLocaleDateString()}.csv`;
+            a.download = `chakujun_${new Date().toLocaleDateString()}.csv`;
             a.click();
         }
 
-        function undo() { if(records.length && confirm('最新の記録を削除？')) { records.pop(); updateUI(); } }
-        function clearAll() { 
-            if(confirm('データを全削除します。チャージ記録もリセットされますがよろしいですか？')) { 
-                records = []; 
-                chargeTotal = 0;
-                localStorage.setItem('mj-charge-total', 0);
-                updateUI(); 
-            } 
-        }
-
-        renderParkSelectors();
-        updateUI();
+        init();
     </script>
 </body>
 </html>
