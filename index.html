@@ -12,12 +12,17 @@
         #toast { transition: opacity 0.3s, transform 0.3s; }
     </style>
 </head>
-<body class="p-4 flex flex-col h-screen">
+<body class="p-4 flex flex-col min-h-screen">
 
     <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-6 py-2 rounded-full font-bold shadow-2xl opacity-0 pointer-events-none z-50"></div>
 
-    <!-- ログイン画面 -->
-    <div id="login-view" class="hidden flex flex-col items-center justify-center h-full gap-6">
+    <!-- ローディング -->
+    <div id="loading-view" class="flex flex-col items-center justify-center h-screen gap-4">
+        <p class="text-gray-400 text-sm">読み込み中...</p>
+    </div>
+
+    <!-- ログイン -->
+    <div id="login-view" class="hidden flex flex-col items-center justify-center h-screen gap-6">
         <h1 class="text-2xl font-bold text-yellow-500 tracking-widest">着順管理</h1>
         <p class="text-gray-400 text-sm">ワンボタン記録</p>
         <button onclick="signInWithGoogle()" class="bg-white text-gray-800 font-bold py-3 px-8 rounded-xl flex items-center gap-3 shadow-lg active:scale-95 transition-transform">
@@ -26,102 +31,150 @@
         </button>
     </div>
 
-    <!-- メイン画面 -->
-    <div id="main-view" class="hidden flex flex-col h-full">
-        <div class="text-center mb-4 flex justify-between items-center">
-            <h1 class="text-lg font-bold text-gray-500 tracking-widest">着順管理</h1>
-            <div class="flex gap-2 items-center">
-                <button onclick="toggleView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">⚙️</button>
+    <!-- ホーム -->
+    <div id="home-view" class="hidden flex flex-col h-full">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-lg font-bold text-yellow-500 tracking-widest">着順管理</h1>
+            <div class="flex gap-2">
+                <button onclick="showView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">設定</button>
                 <button onclick="signOut()" class="text-xs bg-gray-700 px-3 py-1 rounded text-gray-400">ログアウト</button>
             </div>
         </div>
-
-        <!-- 期間フィルター -->
-        <div class="flex gap-2 mb-3 text-xs">
-            <button onclick="setFilter('today')" id="filter-today" class="flex-1 py-1 rounded bg-gray-700 text-gray-300">今日</button>
-            <button onclick="setFilter('month')" id="filter-month" class="flex-1 py-1 rounded bg-gray-700 text-gray-300">今月</button>
-            <button onclick="setFilter('all')" id="filter-all" class="flex-1 py-1 rounded bg-yellow-600 text-white">全期間</button>
+        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+            <p class="text-[10px] text-gray-400 mb-2 uppercase tracking-wider">累計</p>
+            <div class="grid grid-cols-3 gap-2">
+                <div class="text-center">
+                    <p class="text-[10px] text-gray-400">来店回数</p>
+                    <p id="total-visits" class="text-xl font-black text-white">0</p>
+                </div>
+                <div class="text-center border-x border-gray-700">
+                    <p class="text-[10px] text-gray-400">平均着順</p>
+                    <p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[10px] text-gray-400">累計収支</p>
+                    <p id="overall-profit" class="text-xl font-black text-green-400">±0円</p>
+                </div>
+            </div>
         </div>
+        <button onclick="startVisit()" class="w-full bg-yellow-500 text-black font-black py-5 rounded-2xl text-xl shadow-lg active:scale-95 transition-transform mb-4">来店開始</button>
+        <div class="flex-1 overflow-y-auto">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider mb-2">来店履歴</p>
+            <ul id="visit-history" class="space-y-3"></ul>
+        </div>
+    </div>
 
-        <div class="bg-gray-800 rounded-xl p-4 shadow-lg mb-4">
-            <div class="grid grid-cols-3 gap-2 border-b border-gray-700 pb-3 mb-3">
+    <!-- 来店開始 -->
+    <div id="start-visit-view" class="hidden flex flex-col h-full">
+        <div class="flex items-center gap-3 mb-6">
+            <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
+            <h2 class="text-lg font-bold">来店開始</h2>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">パーク選択</label>
+            <div id="start-park-selectors" class="grid grid-cols-2 gap-2"></div>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-6">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">麻雀財布の残高（入店時）</label>
+            <input type="number" id="visit-start-balance" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="例: 10000">
+        </div>
+        <button onclick="confirmStartVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">記録を開始する</button>
+    </div>
+
+    <!-- 来店中 -->
+    <div id="record-view" class="hidden flex flex-col h-full">
+        <div class="flex justify-between items-center mb-3">
+            <div>
+                <p id="record-park-name" class="text-sm font-bold text-yellow-500"></p>
+                <p id="record-start-time" class="text-[10px] text-gray-400"></p>
+            </div>
+            <button onclick="endVisit()" class="text-xs bg-red-800 px-3 py-2 rounded font-bold">退店</button>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+            <div class="grid grid-cols-3 gap-2">
                 <div class="text-center">
                     <p class="text-[10px] text-gray-400">平均着順</p>
-                    <p id="avg-rank" class="text-2xl font-black text-yellow-500">0.00</p>
+                    <p id="visit-avg-rank" class="text-2xl font-black text-yellow-500">-</p>
                 </div>
                 <div class="text-center border-x border-gray-700">
                     <p class="text-[10px] text-gray-400">対局数</p>
-                    <p id="total-games" class="text-2xl font-black text-white">0</p>
+                    <p id="visit-total-games" class="text-2xl font-black text-white">0</p>
                 </div>
                 <div class="text-center">
-                    <p class="text-[10px] text-gray-400">合計Pt</p>
-                    <p id="total-points" class="text-2xl font-black text-orange-500">0</p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4 items-end">
-                <div>
-                    <label class="text-[10px] text-gray-400 block mb-1">現在の残高 (手入力)</label>
-                    <input type="number" id="current-balance" oninput="updateUI()" class="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="0">
-                </div>
-                <div>
-                    <p class="text-[10px] text-gray-400 mb-1">最終収支</p>
-                    <p id="final-profit" class="text-xl font-bold text-green-400">±0</p>
+                    <p class="text-[10px] text-gray-400">消費コスト</p>
+                    <p id="visit-total-pts" class="text-2xl font-black text-orange-500">0</p>
                 </div>
             </div>
             <div class="mt-3 flex items-center justify-between bg-gray-900 p-2 rounded-lg">
-                <div class="flex flex-col">
-                    <span class="text-[9px] text-gray-500 uppercase">Total Charge</span>
-                    <span id="charge-display" class="font-mono font-bold text-yellow-500">0 pt</span>
+                <div>
+                    <p class="text-[9px] text-gray-500 uppercase">追加チャージ</p>
+                    <p id="visit-charge-display" class="font-mono font-bold text-yellow-500 text-sm">0円</p>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="addCharge(10000)" class="bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] font-bold py-2 px-3 rounded shadow-md active:scale-95 transition-all">+10,000</button>
-                    <button onclick="resetCharge()" class="bg-gray-700 text-gray-400 text-[10px] py-2 px-2 rounded">Clear</button>
+                    <button onclick="addVisitCharge()" class="bg-yellow-600 text-white text-[10px] font-bold py-2 px-3 rounded active:scale-95">+ 追加</button>
+                    <button onclick="resetVisitCharge()" class="bg-gray-700 text-gray-400 text-[10px] py-2 px-2 rounded">Clear</button>
                 </div>
             </div>
         </div>
-
-        <div id="park-selectors" class="grid grid-cols-3 gap-2 mb-4"></div>
-
         <div class="grid grid-cols-2 gap-4 mb-4">
             <button onclick="addRecord(1)" class="bg-red-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">1</button>
             <button onclick="addRecord(2)" class="bg-blue-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">2</button>
             <button onclick="addRecord(3)" class="bg-green-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">3</button>
             <button onclick="addRecord(4)" class="bg-gray-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">4</button>
         </div>
-
-        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
-            <button onclick="downloadCSV()" class="bg-indigo-600 py-3 rounded-lg font-bold shadow-lg">CSV保存</button>
-            <button onclick="clearAll()" class="bg-red-900 py-3 rounded-lg font-bold shadow-lg">全データ削除</button>
-        </div>
-
         <div class="flex-1 overflow-y-auto bg-gray-900 rounded-t-2xl p-4">
             <div class="flex justify-between mb-2 items-center text-xs">
                 <span class="text-gray-400 font-bold tracking-wider">HISTORY</span>
-                <button onclick="undo()" class="text-gray-600 underline">1つ取消</button>
+                <button onclick="undoRecord()" class="text-gray-600 underline">1つ取消</button>
             </div>
-            <ul id="history-list" class="space-y-2 text-sm"></ul>
+            <ul id="record-history" class="space-y-2 text-sm"></ul>
         </div>
     </div>
 
-    <!-- 設定画面 -->
+    <!-- 退店 -->
+    <div id="end-visit-view" class="hidden flex flex-col h-full">
+        <div class="flex items-center gap-3 mb-6">
+            <button onclick="showView('record-view')" class="text-gray-400 text-sm">← 戻る</button>
+            <h2 class="text-lg font-bold">退店・集計</h2>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+            <div class="grid grid-cols-2 gap-4 text-center">
+                <div><p class="text-[10px] text-gray-400">対局数</p><p id="end-total-games" class="text-2xl font-black text-white">0</p></div>
+                <div><p class="text-[10px] text-gray-400">平均着順</p><p id="end-avg-rank" class="text-2xl font-black text-yellow-500">-</p></div>
+            </div>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">麻雀財布の残高（退店時）</label>
+            <input type="number" id="visit-end-balance" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="例: 8000">
+            <div class="mt-3 flex justify-between items-center">
+                <p class="text-[10px] text-gray-400">今日の収支</p>
+                <p id="end-profit" class="text-xl font-black text-green-400">-</p>
+            </div>
+        </div>
+        <div class="bg-gray-800 rounded-xl p-4 mb-6">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">メモ（任意）</label>
+            <textarea id="visit-memo" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-sm text-white outline-none focus:border-yellow-500 resize-none" rows="3" placeholder="今日の振り返りなど..."></textarea>
+        </div>
+        <button onclick="confirmEndVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">保存して終了</button>
+    </div>
+
+    <!-- 来店詳細 -->
+    <div id="visit-detail-view" class="hidden flex flex-col h-full">
+        <div class="flex items-center gap-3 mb-4">
+            <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
+            <h2 class="text-lg font-bold">来店詳細</h2>
+        </div>
+        <div id="visit-detail-content" class="flex-1 overflow-y-auto"></div>
+    </div>
+
+    <!-- 設定 -->
     <div id="settings-view" class="hidden flex flex-col h-full overflow-y-auto">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-bold">パーク設定</h2>
-            <button onclick="toggleView('main-view')" class="bg-green-600 px-4 py-1 rounded text-sm font-bold">完了</button>
-        </div>
-        <div class="bg-gray-800 p-4 rounded-xl mb-6">
-            <label class="text-[10px] text-gray-400 uppercase font-bold">開始時の持参残高 (初期値)</label>
-            <input type="number" id="initial-balance-setting" onchange="saveConfigs()" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none" placeholder="例: 50000">
+            <button onclick="saveSettingsAndBack()" class="bg-green-600 px-4 py-1 rounded text-sm font-bold">完了</button>
         </div>
         <div id="park-settings-list" class="space-y-6 mb-6"></div>
         <button onclick="addNewPark()" class="w-full py-4 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 font-bold">+ パークを追加</button>
-    </div>
-
-    <!-- ローディング画面 -->
-    <div id="loading-view" class="flex flex-col items-center justify-center h-full gap-4">
-        <div class="text-yellow-500 text-4xl">⏳</div>
-        <p class="text-gray-400 text-sm">読み込み中...</p>
     </div>
 
     <script>
@@ -130,310 +183,279 @@
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentUser = null;
-        let records = [];
-        let chargeTotal = 0;
-        let initialBalance = 0;
-        let currentFilter = 'all';
         let parkConfigs = [
             { id: 0, name: 'パークA', base: 500, p1: 0, p4: 0 },
             { id: 1, name: 'パークB', base: 300, p1: 0, p4: 100 }
         ];
-        let currentParkId = 0;
+        let selectedParkId = 0;
+        let currentVisit = null;
+        let currentRecords = [];
+        let visits = [];
 
-        // 初期化
         async function init() {
             showView('loading-view');
             const { data: { session } } = await sb.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                await loadFromSupabase();
-                showView('main-view');
-            } else {
-                showView('login-view');
-            }
-
+            if (session) { currentUser = session.user; await loadData(); showView('home-view'); }
+            else showView('login-view');
             sb.auth.onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' && session) {
-                    currentUser = session.user;
-                    await loadFromSupabase();
-                    showView('main-view');
-                } else if (event === 'SIGNED_OUT') {
-                    currentUser = null;
-                    records = [];
-                    showView('login-view');
-                }
+                if (event === 'SIGNED_IN' && session) { currentUser = session.user; await loadData(); showView('home-view'); }
+                else if (event === 'SIGNED_OUT') { currentUser = null; showView('login-view'); }
             });
         }
 
         async function signInWithGoogle() {
-            await sb.auth.signInWithOAuth({
-                provider: 'google',
-                options: { redirectTo: window.location.href }
-            });
+            await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
         }
+        async function signOut() { await sb.auth.signOut(); }
 
-        async function signOut() {
-            await sb.auth.signOut();
-        }
-
-        // Supabaseからデータ読み込み
-        async function loadFromSupabase() {
-            if (!currentUser) return;
-
-            // レコード読み込み
-            const { data: recordsData } = await sb
-                .from('records')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .order('created_at', { ascending: true });
-            records = recordsData || [];
-
-            // 設定読み込み
-            const { data: configData } = await sb
-                .from('configs')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .single();
-
-            if (configData) {
-                chargeTotal = configData.charge_total || 0;
-                initialBalance = configData.initial_balance || 0;
-                parkConfigs = configData.park_configs || parkConfigs;
-                currentParkId = parkConfigs[0]?.id || 0;
-            }
-
-            document.getElementById('initial-balance-setting').value = initialBalance;
-            renderParkSelectors();
-            updateUI();
-        }
-
-        // Supabaseにconfig保存
-        async function saveToSupabase() {
-            if (!currentUser) return;
-            await sb.from('configs').upsert({
-                user_id: currentUser.id,
-                charge_total: chargeTotal,
-                initial_balance: initialBalance,
-                park_configs: parkConfigs,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id' });
-        }
-
-        function showView(viewId) {
-            ['login-view', 'main-view', 'settings-view', 'loading-view'].forEach(id => {
-                document.getElementById(id).classList.add('hidden');
-            });
-            document.getElementById(viewId).classList.remove('hidden');
-        }
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.innerText = message;
-            toast.style.opacity = '1';
-            toast.style.transform = 'translate(-50%, 20px)';
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translate(-50%, -10px)';
-            }, 2000);
-        }
-
-        function setFilter(filter) {
-            currentFilter = filter;
-            ['today', 'month', 'all'].forEach(f => {
-                const btn = document.getElementById(`filter-${f}`);
-                btn.className = `flex-1 py-1 rounded text-xs ${f === filter ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-300'}`;
-            });
-            updateUI();
-        }
-
-        function getFilteredRecords() {
-            const now = new Date();
-            return records.filter(r => {
-                const d = new Date(r.created_at);
-                if (currentFilter === 'today') {
-                    return d.toDateString() === now.toDateString();
-                } else if (currentFilter === 'month') {
-                    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        async function loadData() {
+            const { data: cfg } = await sb.from('configs').select('*').eq('user_id', currentUser.id).single();
+            if (cfg) {
+                parkConfigs = cfg.park_configs || parkConfigs;
+                if (cfg.current_visit) {
+                    currentVisit = cfg.current_visit;
+                    const { data: recs } = await sb.from('records').select('*').eq('visit_id', currentVisit.id).order('created_at', { ascending: true });
+                    currentRecords = recs || [];
                 }
-                return true;
-            });
-        }
-
-        async function addCharge(amount) {
-            chargeTotal += amount;
-            showToast(`+${amount.toLocaleString()} ptしました`);
-            await saveToSupabase();
-            updateUI();
-        }
-
-        async function resetCharge() {
-            if (confirm('チャージ記録をリセットしますか？')) {
-                chargeTotal = 0;
-                await saveToSupabase();
-                updateUI();
             }
-        }
-
-        function toggleView(viewId) {
-            showView(viewId);
-            if (viewId === 'settings-view') renderSettings();
-            if (viewId === 'main-view') {
-                saveConfigs();
-                renderParkSelectors();
-                updateUI();
-            }
-        }
-
-        function renderParkSelectors() {
-            const container = document.getElementById('park-selectors');
-            container.innerHTML = '';
-            parkConfigs.forEach(park => {
-                const btn = document.createElement('button');
-                btn.className = `bg-gray-700 py-2 rounded-lg text-[10px] font-bold transition-all ${currentParkId === park.id ? 'active-park' : ''}`;
-                btn.innerHTML = `${park.name}<br><span class="font-normal text-[8px] opacity-70">${park.base}/${park.p1}/${park.p4}</span>`;
-                btn.onclick = () => { currentParkId = park.id; renderParkSelectors(); };
-                container.appendChild(btn);
-            });
-        }
-
-        function renderSettings() {
-            const container = document.getElementById('park-settings-list');
-            container.innerHTML = '';
-            parkConfigs.forEach((park, index) => {
-                const div = document.createElement('div');
-                div.className = 'bg-gray-800 p-4 rounded-xl space-y-3 relative shadow-inner';
-                div.innerHTML = `
-                    <button onclick="removePark(${index})" class="absolute top-2 right-2 text-red-500 text-[10px] font-bold">削除</button>
-                    <div>
-                        <label class="text-[10px] text-gray-500 uppercase font-bold">パーク名</label>
-                        <input type="text" value="${park.name}" onchange="updatePark(${index}, 'name', this.value)" class="w-full bg-gray-700 p-3 rounded text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500">
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
-                        <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
-                            <input type="number" value="${park.base}" onchange="updatePark(${index}, 'base', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
-                        </div>
-                        <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">1着祝儀等</label>
-                            <input type="number" value="${park.p1 || 0}" onchange="updatePark(${index}, 'p1', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
-                        </div>
-                        <div>
-                            <label class="text-[10px] text-gray-500 uppercase font-bold">4着ペナ等</label>
-                            <input type="number" value="${park.p4 || 0}" onchange="updatePark(${index}, 'p4', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
-                        </div>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        function updatePark(index, field, value) {
-            parkConfigs[index][field] = field === 'name' ? value : parseInt(value);
-        }
-
-        function addNewPark() {
-            parkConfigs.push({ id: Date.now(), name: 'NEW PARK', base: 0, p1: 0, p4: 0 });
-            renderSettings();
-        }
-
-        function removePark(index) {
-            if (confirm('削除しますか？')) { parkConfigs.splice(index, 1); renderSettings(); }
+            const { data: vs } = await sb.from('visits').select('*').eq('user_id', currentUser.id).order('started_at', { ascending: false });
+            visits = vs || [];
+            renderHome();
+            if (currentVisit) { showView('record-view'); renderRecordView(); }
         }
 
         async function saveConfigs() {
-            initialBalance = parseInt(document.getElementById('initial-balance-setting').value) || 0;
-            await saveToSupabase();
+            await sb.from('configs').upsert({
+                user_id: currentUser.id, park_configs: parkConfigs, current_visit: currentVisit, updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+        }
+
+        function showView(id) {
+            ['loading-view','login-view','home-view','start-visit-view','record-view','end-visit-view','visit-detail-view','settings-view'].forEach(v => {
+                document.getElementById(v).classList.add('hidden');
+            });
+            document.getElementById(id).classList.remove('hidden');
+            if (id === 'settings-view') renderSettings();
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.style.opacity = '1'; t.style.transform = 'translate(-50%, 20px)';
+            setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translate(-50%, -10px)'; }, 2000);
+        }
+
+        function renderHome() {
+            document.getElementById('total-visits').innerText = visits.length;
+            const allRanks = visits.filter(v => v.avg_rank).map(v => v.avg_rank);
+            document.getElementById('overall-avg-rank').innerText = allRanks.length > 0 ? (allRanks.reduce((a,b)=>a+b,0)/allRanks.length).toFixed(2) : '-';
+            const totalProfit = visits.reduce((s,v) => s + (v.profit||0), 0);
+            const el = document.getElementById('overall-profit');
+            el.innerText = `${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}円`;
+            el.className = `text-xl font-black ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            const list = document.getElementById('visit-history');
+            list.innerHTML = visits.length === 0 ? '<p class="text-gray-600 text-sm text-center py-8">来店履歴がありません</p>' : '';
+            visits.forEach(v => {
+                const li = document.createElement('li');
+                li.className = 'bg-gray-800 rounded-xl p-4 cursor-pointer active:bg-gray-700';
+                const d = new Date(v.started_at);
+                const profit = v.profit || 0;
+                li.innerHTML = `<div class="flex justify-between items-start">
+                    <div><p class="font-bold text-sm">${v.park_name}</p>
+                    <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ・ ${v.total_games||0}戦 ・ 平均${v.avg_rank ? v.avg_rank.toFixed(2) : '-'}着</p>
+                    ${v.memo ? `<p class="text-[10px] text-gray-500 mt-1">${v.memo}</p>` : ''}</div>
+                    <p class="font-black text-lg ${profit >= 0 ? 'text-green-400' : 'text-red-400'}">${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円</p>
+                </div>`;
+                li.onclick = () => showVisitDetail(v);
+                list.appendChild(li);
+            });
+        }
+
+        function startVisit() {
+            if (currentVisit) { showView('record-view'); renderRecordView(); return; }
+            selectedParkId = parkConfigs[0]?.id || 0;
+            renderStartParkSelectors();
+            document.getElementById('visit-start-balance').value = '';
+            showView('start-visit-view');
+        }
+
+        function renderStartParkSelectors() {
+            const c = document.getElementById('start-park-selectors');
+            c.innerHTML = '';
+            parkConfigs.forEach(p => {
+                const btn = document.createElement('button');
+                btn.className = `py-3 rounded-lg text-sm font-bold transition-all bg-gray-700 ${selectedParkId === p.id ? 'active-park' : ''}`;
+                btn.innerHTML = `${p.name}<br><span class="font-normal text-[10px] opacity-70">${p.base}pt</span>`;
+                btn.onclick = () => { selectedParkId = p.id; renderStartParkSelectors(); };
+                c.appendChild(btn);
+            });
+        }
+
+        async function confirmStartVisit() {
+            const park = parkConfigs.find(p => p.id === selectedParkId) || parkConfigs[0];
+            currentVisit = {
+                id: `visit_${Date.now()}`, user_id: currentUser.id,
+                park_name: park.name, park_config: park,
+                start_balance: parseInt(document.getElementById('visit-start-balance').value) || 0,
+                charge_total: 0, started_at: new Date().toISOString()
+            };
+            currentRecords = [];
+            await saveConfigs();
+            showView('record-view');
+            renderRecordView();
+        }
+
+        function renderRecordView() {
+            if (!currentVisit) return;
+            document.getElementById('record-park-name').innerText = currentVisit.park_name;
+            const d = new Date(currentVisit.started_at);
+            document.getElementById('record-start-time').innerText = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} 入店`;
+            updateRecordUI();
+        }
+
+        function updateRecordUI() {
+            let sumRank = 0, sumPts = 0;
+            const list = document.getElementById('record-history');
+            list.innerHTML = '';
+            currentRecords.slice().reverse().forEach(r => {
+                const li = document.createElement('li');
+                li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${r.rank===1?'border-red-600':r.rank===4?'border-gray-500':'border-transparent'}`;
+                const d = new Date(r.created_at);
+                li.innerHTML = `<span class="font-bold">${r.rank}着</span><span class="text-[10px] text-orange-400 font-mono">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} -${r.pts}pt</span>`;
+                list.appendChild(li);
+                sumRank += r.rank; sumPts += r.pts;
+            });
+            document.getElementById('visit-avg-rank').innerText = currentRecords.length > 0 ? (sumRank/currentRecords.length).toFixed(2) : '-';
+            document.getElementById('visit-total-games').innerText = currentRecords.length;
+            document.getElementById('visit-total-pts').innerText = sumPts;
+            document.getElementById('visit-charge-display').innerText = `${(currentVisit?.charge_total||0).toLocaleString()}円`;
         }
 
         async function addRecord(rank) {
-            if (!currentUser) return;
-            const park = parkConfigs.find(p => p.id === currentParkId) || parkConfigs[0];
-            let pts = park ? park.base : 0;
+            if (!currentVisit) return;
+            const park = currentVisit.park_config;
+            let pts = park.base || 0;
             if (rank === 1) pts += (park.p1 || 0);
             if (rank === 4) pts += (park.p4 || 0);
-
             const { data, error } = await sb.from('records').insert({
-                user_id: currentUser.id,
-                rank,
-                park_name: park ? park.name : 'Unknown',
-                pts,
-                created_at: new Date().toISOString()
+                visit_id: currentVisit.id, user_id: currentUser.id, rank, pts, created_at: new Date().toISOString()
             }).select().single();
-
-            if (!error && data) {
-                records.push(data);
-                updateUI();
-            }
+            if (!error && data) { currentRecords.push(data); updateRecordUI(); }
         }
 
-        function updateUI() {
-            const filtered = getFilteredRecords();
-            const list = document.getElementById('history-list');
-            let sumRank = 0; let sumPoints = 0;
-            list.innerHTML = '';
-
-            filtered.slice().reverse().forEach(reg => {
-                const li = document.createElement('li');
-                li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${reg.rank === 1 ? 'border-red-600' : (reg.rank === 4 ? 'border-gray-500' : 'border-transparent')}`;
-                const d = new Date(reg.created_at);
-                const timeStr = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-                li.innerHTML = `<div><span class="font-bold">${reg.rank}着</span> <span class="text-[10px] text-gray-400 ml-1 font-normal">${reg.park_name}</span></div>
-                                <div class="text-right text-[10px] text-gray-500 font-mono">${timeStr}<br><span class="text-orange-400 font-bold">${reg.pts >= 0 ? '-' : '+'}${Math.abs(reg.pts)}pt</span></div>`;
-                list.appendChild(li);
-                sumRank += reg.rank;
-                sumPoints += reg.pts;
-            });
-
-            document.getElementById('avg-rank').innerText = filtered.length > 0 ? (sumRank / filtered.length).toFixed(2) : '0.00';
-            document.getElementById('total-games').innerText = filtered.length;
-            document.getElementById('total-points').innerText = sumPoints;
-            document.getElementById('charge-display').innerText = `${chargeTotal.toLocaleString()} pt`;
-
-            const currentBalance = parseInt(document.getElementById('current-balance').value) || 0;
-            const finalProfit = (currentBalance - initialBalance) - chargeTotal + sumPoints;
-            const profitEl = document.getElementById('final-profit');
-            profitEl.innerText = `${finalProfit >= 0 ? '+' : ''}${finalProfit.toLocaleString()}`;
-            profitEl.className = `text-xl font-bold ${finalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
-        }
-
-        async function undo() {
-            if (!records.length) return;
-            if (!confirm('最新の記録を削除？')) return;
-            const last = records[records.length - 1];
+        async function undoRecord() {
+            if (!currentRecords.length || !confirm('最新の記録を削除？')) return;
+            const last = currentRecords[currentRecords.length - 1];
             await sb.from('records').delete().eq('id', last.id);
-            records.pop();
-            updateUI();
+            currentRecords.pop();
+            updateRecordUI();
         }
 
-        async function clearAll() {
-            if (!confirm('データを全削除します。チャージ記録もリセットされますがよろしいですか？')) return;
-            await sb.from('records').delete().eq('user_id', currentUser.id);
-            records = [];
-            chargeTotal = 0;
-            await saveToSupabase();
-            updateUI();
+        function addVisitCharge() {
+            const amt = parseInt(prompt('追加チャージ金額（円）') || '0');
+            if (!amt || isNaN(amt)) return;
+            currentVisit.charge_total = (currentVisit.charge_total || 0) + amt;
+            saveConfigs(); updateRecordUI();
+            showToast(`+${amt.toLocaleString()}円 チャージ`);
         }
 
-        function downloadCSV() {
-            const filtered = getFilteredRecords();
-            if (!filtered.length) return alert('データがありません');
-            const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-            let totalPts = 0;
-            filtered.forEach(r => { counts[r.rank]++; totalPts += r.pts; });
-            let csv = '\uFEFF時間,パーク,着順,消費Pt\n' + filtered.map(r => {
-                const d = new Date(r.created_at);
-                const t = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-                return `${t},${r.park_name},${r.rank},${r.pts}`;
-            }).join('\n');
-            csv += `\nチャージ総額,${chargeTotal}\n`;
-            csv += '1着,2着,3着,4着,合計Pt\n';
-            csv += `${counts[1]},${counts[2]},${counts[3]},${counts[4]},${totalPts}\n`;
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `chakujun_${new Date().toLocaleDateString()}.csv`;
-            a.click();
+        function resetVisitCharge() {
+            if (!confirm('チャージ記録をリセットしますか？')) return;
+            currentVisit.charge_total = 0;
+            saveConfigs(); updateRecordUI();
         }
+
+        function endVisit() {
+            const totalGames = currentRecords.length;
+            const sumRank = currentRecords.reduce((s,r) => s+r.rank, 0);
+            document.getElementById('end-total-games').innerText = totalGames;
+            document.getElementById('end-avg-rank').innerText = totalGames > 0 ? (sumRank/totalGames).toFixed(2) : '-';
+            document.getElementById('visit-end-balance').value = '';
+            document.getElementById('end-profit').innerText = '-';
+            document.getElementById('visit-memo').value = '';
+            showView('end-visit-view');
+        }
+
+        function calcEndProfit() {
+            const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
+            const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
+            const el = document.getElementById('end-profit');
+            el.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円`;
+            el.className = `text-xl font-black ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+        }
+
+        async function confirmEndVisit() {
+            const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
+            const memo = document.getElementById('visit-memo').value;
+            const totalGames = currentRecords.length;
+            const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
+            const sumPts = currentRecords.reduce((s,r)=>s+r.pts,0);
+            const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
+            const { data: saved } = await sb.from('visits').insert({
+                user_id: currentUser.id, park_name: currentVisit.park_name, park_config: currentVisit.park_config,
+                start_balance: currentVisit.start_balance, end_balance: endBal,
+                charge_total: currentVisit.charge_total||0, profit,
+                total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null,
+                total_pts: sumPts, memo, started_at: currentVisit.started_at, ended_at: new Date().toISOString()
+            }).select().single();
+            if (saved) {
+                await sb.from('records').update({ visit_id: saved.id }).eq('visit_id', currentVisit.id);
+                visits.unshift(saved);
+            }
+            currentVisit = null; currentRecords = [];
+            await saveConfigs();
+            renderHome(); showView('home-view');
+            showToast('来店記録を保存しました');
+        }
+
+        function showVisitDetail(visit) {
+            const profit = visit.profit || 0;
+            const d = new Date(visit.started_at);
+            document.getElementById('visit-detail-content').innerHTML = `
+                <div class="bg-gray-800 rounded-xl p-4 mb-4">
+                    <p class="font-bold text-lg">${visit.park_name}</p>
+                    <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">収支</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">平均着順</p><p class="text-2xl font-black text-yellow-500">${visit.avg_rank?visit.avg_rank.toFixed(2):'-'}</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${visit.total_games||0}</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${visit.total_pts||0}pt</p></div>
+                </div>
+                <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm text-gray-400 space-y-2">
+                    <div class="flex justify-between"><span>入店残高</span><span class="text-white">${(visit.start_balance||0).toLocaleString()}円</span></div>
+                    <div class="flex justify-between"><span>退店残高</span><span class="text-white">${(visit.end_balance||0).toLocaleString()}円</span></div>
+                    <div class="flex justify-between"><span>追加チャージ</span><span class="text-white">${(visit.charge_total||0).toLocaleString()}円</span></div>
+                </div>
+                ${visit.memo ? `<div class="bg-gray-800 rounded-xl p-4 mb-4"><p class="text-[10px] text-gray-400 mb-1">メモ</p><p class="text-sm">${visit.memo}</p></div>` : ''}
+            `;
+            showView('visit-detail-view');
+        }
+
+        function renderSettings() {
+            const c = document.getElementById('park-settings-list');
+            c.innerHTML = '';
+            parkConfigs.forEach((park, i) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-800 p-4 rounded-xl space-y-3 relative';
+                div.innerHTML = `
+                    <button onclick="removePark(${i})" class="absolute top-2 right-2 text-red-500 text-[10px] font-bold">削除</button>
+                    <div><label class="text-[10px] text-gray-500 uppercase font-bold">パーク名</label>
+                    <input type="text" value="${park.name}" onchange="parkConfigs[${i}].name=this.value" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none"></div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div><label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
+                        <input type="number" value="${park.base}" onchange="parkConfigs[${i}].base=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                        <div><label class="text-[10px] text-gray-500 uppercase font-bold">1着祝儀</label>
+                        <input type="number" value="${park.p1||0}" onchange="parkConfigs[${i}].p1=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                        <div><label class="text-[10px] text-gray-500 uppercase font-bold">4着ペナ</label>
+                        <input type="number" value="${park.p4||0}" onchange="parkConfigs[${i}].p4=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                    </div>`;
+                c.appendChild(div);
+            });
+        }
+
+        function addNewPark() { parkConfigs.push({ id: Date.now(), name: 'NEW PARK', base: 0, p1: 0, p4: 0 }); renderSettings(); }
+        function removePark(i) { if (confirm('削除しますか？')) { parkConfigs.splice(i, 1); renderSettings(); } }
+        async function saveSettingsAndBack() { await saveConfigs(); showView('home-view'); renderHome(); }
 
         init();
     </script>
