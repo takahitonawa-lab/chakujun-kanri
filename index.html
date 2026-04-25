@@ -119,6 +119,7 @@
         <div class="flex-1 overflow-y-auto bg-gray-900 rounded-t-2xl p-4">
             <div class="flex justify-between mb-2 items-center text-xs">
                 <span class="text-gray-400 font-bold tracking-wider">HISTORY</span>
+                
             </div>
             <ul id="record-history" class="space-y-2 text-sm"></ul>
         </div>
@@ -159,9 +160,12 @@
 
     <!-- 来店詳細 -->
     <div id="visit-detail-view" class="hidden flex flex-col h-full">
-        <div class="flex items-center gap-3 mb-4">
-            <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
-            <h2 class="text-lg font-bold">来店詳細</h2>
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
+                <h2 class="text-lg font-bold">来店詳細</h2>
+            </div>
+            <button id="detail-edit-btn" onclick="toggleDetailEdit()" class="text-xs bg-gray-700 px-3 py-1 rounded">編集</button>
         </div>
         <div id="visit-detail-content" class="flex-1 overflow-y-auto"></div>
     </div>
@@ -367,7 +371,13 @@
                 const li = document.createElement('li');
                 li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${r.rank===1?'border-red-600':r.rank===4?'border-gray-500':'border-transparent'}`;
                 const d = new Date(r.created_at);
-                li.innerHTML = `<div class="flex items-center gap-2"><span class="font-black text-lg w-8">${r.rank}着</span><span class="text-[10px] text-orange-400 font-mono">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} -${r.pts}pt</span></div><div class="flex gap-1"><button onclick="editRecord('${r.id}')" class="bg-gray-700 text-[10px] px-2 py-1 rounded">編集</button><button onclick="deleteRecord('${r.id}')" class="bg-red-900 text-[10px] px-2 py-1 rounded">削除</button></div>`;
+                const changingId = window._changingRecordId;
+                if (changingId === r.id) {
+                    const rankBtns = [1,2,3,4].map(n => `<button onclick="applyRecordChange('${r.id}',${n})" class="w-9 h-9 rounded font-black text-sm ${r.rank===n?'bg-gray-600 text-gray-500':'bg-gray-700 text-white active:scale-95'}" ${r.rank===n?'disabled':''}>${n}</button>`).join('');
+                    li.innerHTML = `<div class="flex items-center gap-1">${rankBtns}</div><button onclick="cancelRecordChange()" class="text-gray-500 text-[10px] px-2 py-1">✕</button>`;
+                } else {
+                    li.innerHTML = `<div class="flex items-center gap-2"><span class="font-black text-lg w-8">${r.rank}着</span><span class="text-[10px] text-orange-400 font-mono">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} -${r.pts}pt</span></div><div class="flex gap-1"><button onclick="startRecordChange('${r.id}')" class="bg-gray-700 text-[10px] px-2 py-1 rounded">変更</button><button onclick="deleteRecord('${r.id}')" class="bg-red-900 text-[10px] px-2 py-1 rounded">削除</button></div>`;
+                }
                 list.appendChild(li);
                 sumRank += r.rank; sumPts += r.pts;
             });
@@ -400,10 +410,12 @@
             updateRecordUI();
             showToast('削除しました');
         }
+
         async function editRecord(id) {
             const rec = currentRecords.find(r => r.id === id);
             if (!rec) return;
-            const newRank = parseInt(prompt('着順を入力（現在: ' + rec.rank + '着）\n1〜4の数字'));
+            const newRank = parseInt(prompt('着順を入力してください（現在: ' + rec.rank + '着）
+1〜4の数字を入力'));
             if (!newRank || newRank < 1 || newRank > 4) { showToast('1〜4の数字を入力してください'); return; }
             const park = currentVisit.park_config;
             let pts = park.base || 0;
@@ -456,28 +468,141 @@
             showToast('来店記録を保存しました');
         }
 
-        function showVisitDetail(visit) {
-            const profit = visit.profit || 0;
-            const d = new Date(visit.started_at);
+        let detailVisit = null;
+        let detailRecords = [];
+        let detailEditMode = false;
+
+        async function showVisitDetail(visit) {
+            detailVisit = visit;
+            detailEditMode = false;
+            const { data: recs } = await sb.from('records').select('*').eq('visit_id', visit.id).order('created_at', { ascending: true });
+            detailRecords = recs || [];
+            document.getElementById('detail-edit-btn').innerText = '編集';
+            renderDetailView();
+            showView('visit-detail-view');
+        }
+
+        function toggleDetailEdit() {
+            detailEditMode = !detailEditMode;
+            document.getElementById('detail-edit-btn').innerText = detailEditMode ? '完了' : '編集';
+            if (!detailEditMode) saveDetailChanges();
+            renderDetailView();
+        }
+
+        async function saveDetailChanges() {
+            const profit = (detailVisit.end_balance||0) - (detailVisit.start_balance||0) - (detailVisit.charge_total||0);
+            const totalGames = detailRecords.length;
+            const sumRank = detailRecords.reduce((s,r)=>s+r.rank,0);
+            const avgRank = totalGames > 0 ? sumRank/totalGames : null;
+            const totalPts = detailRecords.reduce((s,r)=>s+r.pts,0);
+            detailVisit.profit = profit;
+            detailVisit.total_games = totalGames;
+            detailVisit.avg_rank = avgRank;
+            detailVisit.total_pts = totalPts;
+            await sb.from('visits').update({
+                park_name: detailVisit.park_name,
+                start_balance: detailVisit.start_balance,
+                end_balance: detailVisit.end_balance,
+                charge_total: detailVisit.charge_total,
+                profit, total_games: totalGames, avg_rank: avgRank, total_pts: totalPts,
+                memo: detailVisit.memo
+            }).eq('id', detailVisit.id);
+            const idx = visits.findIndex(v => v.id === detailVisit.id);
+            if (idx >= 0) visits[idx] = { ...detailVisit };
+            renderHome();
+            showToast('保存しました');
+        }
+
+        function renderDetailView() {
+            const v = detailVisit;
+            const profit = (v.end_balance||0) - (v.start_balance||0) - (v.charge_total||0);
+            const d = new Date(v.started_at);
+            const edit = detailEditMode;
+
+            const balanceButtons = (field) => `
+                <div class="grid grid-cols-4 gap-1 mt-2">
+                    <button onclick="adjustDetailBalance('${field}',-10000)" class="bg-gray-700 py-1 rounded text-[10px] font-bold text-red-400">-10,000</button>
+                    <button onclick="adjustDetailBalance('${field}',-1000)" class="bg-gray-700 py-1 rounded text-[10px] font-bold text-red-400">-1,000</button>
+                    <button onclick="adjustDetailBalance('${field}',1000)" class="bg-gray-700 py-1 rounded text-[10px] font-bold text-green-400">+1,000</button>
+                    <button onclick="adjustDetailBalance('${field}',10000)" class="bg-gray-700 py-1 rounded text-[10px] font-bold text-green-400">+10,000</button>
+                </div>`;
+
+            let recordsHtml = detailRecords.map((r, i) => {
+                const rd = new Date(r.created_at);
+                const t = `${rd.getHours()}:${String(rd.getMinutes()).padStart(2,'0')}`;
+                if (edit) {
+                    const btns = [1,2,3,4].map(n => `<button onclick="changeDetailRecord('${r.id}',${n})" class="w-8 h-8 rounded font-black text-sm ${r.rank===n?'bg-gray-600 text-gray-500':'bg-gray-700 text-white active:scale-95'}" ${r.rank===n?'disabled':''}>${n}</button>`).join('');
+                    return `<li class="flex items-center justify-between bg-gray-800 p-3 rounded-lg">
+                        <div class="flex items-center gap-2">${btns}<span class="text-[10px] text-gray-500 ml-1">${t}</span></div>
+                        <button onclick="deleteDetailRecord('${r.id}')" class="bg-red-900 text-[10px] px-2 py-1 rounded ml-2">削除</button>
+                    </li>`;
+                } else {
+                    return `<li class="flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${r.rank===1?'border-red-600':r.rank===4?'border-gray-500':'border-transparent'}">
+                        <span class="font-black">${r.rank}着</span>
+                        <span class="text-[10px] text-orange-400 font-mono">${t} -${r.pts}pt</span>
+                    </li>`;
+                }
+            }).join('');
+
             document.getElementById('visit-detail-content').innerHTML = `
                 <div class="bg-gray-800 rounded-xl p-4 mb-4">
-                    <p class="font-bold text-lg">${visit.park_name}</p>
+                    ${edit ? `<input type="text" value="${v.park_name}" onchange="detailVisit.park_name=this.value" class="w-full bg-gray-700 p-2 rounded text-sm font-bold outline-none mb-1">` : `<p class="font-bold text-lg">${v.park_name}</p>`}
                     <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}</p>
                 </div>
                 <div class="grid grid-cols-2 gap-3 mb-4">
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">収支</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">平均着順</p><p class="text-2xl font-black text-yellow-500">${visit.avg_rank?visit.avg_rank.toFixed(2):'-'}</p></div>
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${visit.total_games||0}</p></div>
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${visit.total_pts||0}pt</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">平均着順</p><p class="text-2xl font-black text-yellow-500">${detailRecords.length>0?(detailRecords.reduce((s,r)=>s+r.rank,0)/detailRecords.length).toFixed(2):'-'}</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${detailRecords.length}</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${detailRecords.reduce((s,r)=>s+r.pts,0)}pt</p></div>
                 </div>
-                <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm text-gray-400 space-y-2">
-                    <div class="flex justify-between"><span>入店残高</span><span class="text-white">${(visit.start_balance||0).toLocaleString()}円</span></div>
-                    <div class="flex justify-between"><span>退店残高</span><span class="text-white">${(visit.end_balance||0).toLocaleString()}円</span></div>
-                    <div class="flex justify-between"><span>追加チャージ</span><span class="text-white">${(visit.charge_total||0).toLocaleString()}円</span></div>
+                <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm space-y-3">
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">入店残高</p>
+                        ${edit ? `<input type="number" value="${v.start_balance||0}" onchange="detailVisit.start_balance=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('start_balance')}` : `<p class="text-white">${(v.start_balance||0).toLocaleString()}円</p>`}
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">退店残高</p>
+                        ${edit ? `<input type="number" value="${v.end_balance||0}" onchange="detailVisit.end_balance=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('end_balance')}` : `<p class="text-white">${(v.end_balance||0).toLocaleString()}円</p>`}
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">追加チャージ</p>
+                        ${edit ? `<input type="number" value="${v.charge_total||0}" onchange="detailVisit.charge_total=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('charge_total')}` : `<p class="text-white">${(v.charge_total||0).toLocaleString()}円</p>`}
+                    </div>
                 </div>
-                ${visit.memo ? `<div class="bg-gray-800 rounded-xl p-4 mb-4"><p class="text-[10px] text-gray-400 mb-1">メモ</p><p class="text-sm">${visit.memo}</p></div>` : ''}
+                <div class="bg-gray-800 rounded-xl p-4 mb-4">
+                    <p class="text-[10px] text-gray-400 mb-2">メモ</p>
+                    ${edit ? `<textarea onchange="detailVisit.memo=this.value" class="w-full bg-gray-700 p-2 rounded text-sm outline-none text-white resize-none" rows="3">${v.memo||''}</textarea>` : `<p class="text-sm text-white">${v.memo||'なし'}</p>`}
+                </div>
+                ${detailRecords.length > 0 ? `
+                <div class="bg-gray-800 rounded-xl p-4 mb-4">
+                    <p class="text-[10px] text-gray-400 mb-2">着順記録</p>
+                    <ul class="space-y-2">${recordsHtml}</ul>
+                </div>` : ''}
             `;
-            showView('visit-detail-view');
+        }
+
+        function adjustDetailBalance(field, delta) {
+            detailVisit[field] = Math.max(0, (detailVisit[field]||0) + delta);
+            renderDetailView();
+        }
+
+        async function changeDetailRecord(id, newRank) {
+            const rec = detailRecords.find(r => r.id === id);
+            if (!rec) return;
+            const park = detailVisit.park_config;
+            let pts = park.base || 0;
+            if (newRank === 1) pts += (park.p1 || 0);
+            if (newRank === 4) pts += (park.p4 || 0);
+            await sb.from('records').update({ rank: newRank, pts }).eq('id', id);
+            rec.rank = newRank; rec.pts = pts;
+            renderDetailView();
+        }
+
+        async function deleteDetailRecord(id) {
+            if (!confirm('この記録を削除しますか？')) return;
+            await sb.from('records').delete().eq('id', id);
+            detailRecords = detailRecords.filter(r => r.id !== id);
+            renderDetailView();
         }
 
         function renderSettings() {
