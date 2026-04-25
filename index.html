@@ -181,7 +181,7 @@
             if (!currentUser) return;
 
             // レコード読み込み
-            const { data: recordsData } = await supabase
+            const { data: recordsData } = await sb
                 .from('records')
                 .select('*')
                 .eq('user_id', currentUser.id)
@@ -189,7 +189,7 @@
             records = recordsData || [];
 
             // 設定読み込み
-            const { data: configData } = await supabase
+            const { data: configData } = await sb
                 .from('configs')
                 .select('*')
                 .eq('user_id', currentUser.id)
