@@ -411,21 +411,6 @@
             showToast('削除しました');
         }
 
-        async function editRecord(id) {
-            const rec = currentRecords.find(r => r.id === id);
-            if (!rec) return;
-            const newRank = parseInt(prompt('着順を入力してください（現在: ' + rec.rank + '着）
-1〜4の数字を入力'));
-            if (!newRank || newRank < 1 || newRank > 4) { showToast('1〜4の数字を入力してください'); return; }
-            const park = currentVisit.park_config;
-            let pts = park.base || 0;
-            if (newRank === 1) pts += (park.p1 || 0);
-            if (newRank === 4) pts += (park.p4 || 0);
-            await sb.from('records').update({ rank: newRank, pts }).eq('id', id);
-            rec.rank = newRank; rec.pts = pts;
-            updateRecordUI();
-            showToast('更新しました');
-        }
 
         function endVisit() {
             const totalGames = currentRecords.length;
