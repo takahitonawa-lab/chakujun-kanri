@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雀レコ Pro - Custom Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #1a1a1a; color: #e5e5e5; font-family: sans-serif; }
+        .active-park { border: 2px solid #eab308; background-color: #374151 !important; }
+        /* トーストアニメーション */
+        #toast { transition: opacity 0.3s, transform 0.3s; }
+    </style>
+</head>
+<body class="p-4 flex flex-col h-screen">
+
+    <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-6 py-2 rounded-full font-bold shadow-2xl opacity-0 pointer-events-none z-50">
+        +10,000 ptしました
+    </div>
+
+    <div id="main-view" class="flex flex-col h-full">
+        <div class="text-center mb-4 flex justify-between items-center">
+            <h1 class="text-lg font-bold text-gray-500 tracking-widest">MAHJONG VIBES</h1>
+            <button onclick="toggleView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">⚙️ 設定</button>
+        </div>
+
+        <div class="bg-gray-800 rounded-xl p-4 shadow-lg mb-4">
+            <div class="grid grid-cols-3 gap-2 border-b border-gray-700 pb-3 mb-3">
+                <div class="text-center">
+                    <p class="text-[10px] text-gray-400">平均着順</p>
+                    <p id="avg-rank" class="text-2xl font-black text-yellow-500">0.00</p>
+                </div>
+                <div class="text-center border-x border-gray-700">
+                    <p class="text-[10px] text-gray-400">対局数</p>
+                    <p id="total-games" class="text-2xl font-black text-white">0</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[10px] text-gray-400">合計Pt</p>
+                    <p id="total-points" class="text-2xl font-black text-orange-500">0</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 items-end">
+                <div>
+                    <label class="text-[10px] text-gray-400 block mb-1">現在の残高 (手入力)</label>
+                    <input type="number" id="current-balance" oninput="updateUI()" class="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xl font-bold text-white outline-none focus:border-yellow-500" placeholder="0">
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-400 mb-1">最終収支</p>
+                    <p id="final-profit" class="text-xl font-bold text-green-400">±0</p>
+                </div>
+            </div>
+            <div class="mt-3 flex items-center justify-between bg-gray-900 p-2 rounded-lg">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-gray-500 uppercase">Total Charge</span>
+                    <span id="charge-display" class="font-mono font-bold text-yellow-500">0 pt</span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="addCharge(10000)" class="bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] font-bold py-2 px-3 rounded shadow-md active:scale-95 transition-all">+10,000</button>
+                    <button onclick="resetCharge()" class="bg-gray-700 text-gray-400 text-[10px] py-2 px-2 rounded">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="park-selectors" class="grid grid-cols-3 gap-2 mb-4"></div>
+
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <button onclick="addRecord(1)" class="bg-red-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">1</button>
+            <button onclick="addRecord(2)" class="bg-blue-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">2</button>
+            <button onclick="addRecord(3)" class="bg-green-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">3</button>
+            <button onclick="addRecord(4)" class="bg-gray-600 h-20 rounded-2xl text-4xl font-black shadow-lg active:scale-95 transition-transform">4</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+            <button onclick="downloadCSV()" class="bg-indigo-600 py-3 rounded-lg font-bold shadow-lg">CSV保存</button>
+            <button onclick="clearAll()" class="bg-red-900 py-3 rounded-lg font-bold shadow-lg">全データ削除</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto bg-gray-900 rounded-t-2xl p-4">
+            <div class="flex justify-between mb-2 items-center text-xs">
+                <span class="text-gray-400 font-bold tracking-wider">HISTORY</span>
+                <button onclick="undo()" class="text-gray-600 underline">1つ取消</button>
+            </div>
+            <ul id="history-list" class="space-y-2 text-sm"></ul>
+        </div>
+    </div>
+
+    <div id="settings-view" class="hidden flex flex-col h-full overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">パーク設定</h2>
+            <button onclick="toggleView('main-view')" class="bg-green-600 px-4 py-1 rounded text-sm font-bold">完了</button>
+        </div>
+        
+        <div class="bg-gray-800 p-4 rounded-xl mb-6">
+            <label class="text-[10px] text-gray-400 uppercase font-bold">開始時の持参残高 (初期値)</label>
+            <input type="number" id="initial-balance-setting" onchange="saveConfigs()" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none" placeholder="例: 50000">
+        </div>
+
+        <div id="park-settings-list" class="space-y-6 mb-6"></div>
+        <button onclick="addNewPark()" class="w-full py-4 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 font-bold">+ パークを追加</button>
+    </div>
+
+    <script>
+        // データ読み込み（チャージと開始残高を追加）
+        let records = JSON.parse(localStorage.getItem('mj-records-final') || '[]');
+        let chargeTotal = parseInt(localStorage.getItem('mj-charge-total') || '0');
+        let initialBalance = parseInt(localStorage.getItem('mj-initial-balance') || '0');
+        
+        let parkConfigs = JSON.parse(localStorage.getItem('mj-parks-final') || JSON.stringify([
+            { id: 0, name: 'パークA', base: 500, p1: 0, p4: 0 },
+            { id: 1, name: 'パークB', base: 300, p1: 0, p4: 100 }
+        ]));
+        let currentParkId = parkConfigs[0] ? parkConfigs[0].id : 0;
+
+        // UI初期化
+        document.getElementById('initial-balance-setting').value = initialBalance;
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 20px)';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, -10px)';
+            }, 2000);
+        }
+
+        function addCharge(amount) {
+            chargeTotal += amount;
+            localStorage.setItem('mj-charge-total', chargeTotal);
+            showToast(`+${amount.toLocaleString()} ptしました`);
+            updateUI();
+        }
+
+        function resetCharge() {
+            if(confirm('チャージ記録をリセットしますか？')) {
+                chargeTotal = 0;
+                localStorage.setItem('mj-charge-total', chargeTotal);
+                updateUI();
+            }
+        }
+
+        function toggleView(viewId) {
+            document.getElementById('main-view').classList.add('hidden');
+            document.getElementById('settings-view').classList.add('hidden');
+            document.getElementById(viewId).classList.remove('hidden');
+            if(viewId === 'settings-view') renderSettings();
+            if(viewId === 'main-view') {
+                saveConfigs();
+                renderParkSelectors();
+                updateUI();
+            }
+        }
+
+        function renderParkSelectors() {
+            const container = document.getElementById('park-selectors');
+            container.innerHTML = '';
+            parkConfigs.forEach(park => {
+                const btn = document.createElement('button');
+                btn.className = `bg-gray-700 py-2 rounded-lg text-[10px] font-bold transition-all ${currentParkId === park.id ? 'active-park' : ''}`;
+                btn.innerHTML = `${park.name}<br><span class="font-normal text-[8px] opacity-70">${park.base}/${park.p1}/${park.p4}</span>`;
+                btn.onclick = () => { currentParkId = park.id; renderParkSelectors(); };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderSettings() {
+            const container = document.getElementById('park-settings-list');
+            container.innerHTML = '';
+            parkConfigs.forEach((park, index) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-800 p-4 rounded-xl space-y-3 relative shadow-inner';
+                div.innerHTML = `
+                    <button onclick="removePark(${index})" class="absolute top-2 right-2 text-red-500 text-[10px] font-bold">削除</button>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold">パーク名</label>
+                        <input type="text" value="${park.name}" onchange="updatePark(${index}, 'name', this.value)" class="w-full bg-gray-700 p-3 rounded text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500">
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
+                            <input type="number" value="${park.base}" onchange="updatePark(${index}, 'base', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">1着祝儀等</label>
+                            <input type="number" value="${park.p1 || 0}" onchange="updatePark(${index}, 'p1', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 uppercase font-bold">4着ペナ等</label>
+                            <input type="number" value="${park.p4 || 0}" onchange="updatePark(${index}, 'p4', this.value)" class="w-full bg-gray-700 p-2 rounded text-xs">
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function updatePark(index, field, value) {
+            parkConfigs[index][field] = field === 'name' ? value : parseInt(value);
+            saveConfigs();
+        }
+
+        function addNewPark() {
+            parkConfigs.push({ id: Date.now(), name: 'NEW PARK', base: 0, p1: 0, p4: 0 });
+            renderSettings();
+        }
+
+        function removePark(index) {
+            if(confirm('削除しますか？')) { parkConfigs.splice(index, 1); renderSettings(); }
+        }
+
+        function saveConfigs() { 
+            localStorage.setItem('mj-parks-final', JSON.stringify(parkConfigs)); 
+            initialBalance = parseInt(document.getElementById('initial-balance-setting').value) || 0;
+            localStorage.setItem('mj-initial-balance', initialBalance);
+        }
+
+        function addRecord(rank) {
+            const park = parkConfigs.find(p => p.id === currentParkId) || parkConfigs[0];
+            let pts = (park ? park.base : 0);
+            if (rank === 1) pts += (park.p1 || 0);
+            if (rank === 4) pts += (park.p4 || 0);
+            
+            const now = new Date();
+            const timeStr = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            records.push({ rank, time: timeStr, parkName: park ? park.name : 'Unknown', pts });
+            updateUI();
+        }
+
+        function updateUI() {
+            const list = document.getElementById('history-list');
+            let sumRank = 0; let sumPoints = 0;
+            list.innerHTML = '';
+            records.slice().reverse().forEach(reg => {
+                const li = document.createElement('li');
+                li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${reg.rank === 1 ? 'border-red-600' : (reg.rank === 4 ? 'border-gray-500' : 'border-transparent')}`;
+                li.innerHTML = `<div><span class="font-bold">${reg.rank}着</span> <span class="text-[10px] text-gray-400 ml-1 font-normal">${reg.parkName}</span></div>
+                                <div class="text-right text-[10px] text-gray-500 font-mono">${reg.time}<br><span class="text-orange-400 font-bold">${reg.pts >= 0 ? '-' : '+'}${Math.abs(reg.pts)}pt</span></div>`;
+                list.appendChild(li);
+                sumRank += reg.rank; sumPoints += reg.pts;
+            });
+
+            // 基本情報の更新
+            document.getElementById('avg-rank').innerText = records.length > 0 ? (sumRank/records.length).toFixed(2) : "0.00";
+            document.getElementById('total-games').innerText = records.length;
+            document.getElementById('total-points').innerText = sumPoints;
+            document.getElementById('charge-display').innerText = `${chargeTotal.toLocaleString()} pt`;
+
+            // 最終収支の計算
+            // 収支 = (今の残高 - 開始時の残高) - チャージ総額 + 獲得スコア
+            const currentBalance = parseInt(document.getElementById('current-balance').value) || 0;
+            const finalProfit = (currentBalance - initialBalance) - chargeTotal + sumPoints;
+            
+            const profitEl = document.getElementById('final-profit');
+            profitEl.innerText = `${finalProfit >= 0 ? '+' : ''}${finalProfit.toLocaleString()}`;
+            profitEl.className = `text-xl font-bold ${finalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
+            localStorage.setItem('mj-records-final', JSON.stringify(records));
+        }
+
+        function downloadCSV() {
+            if(!records.length) return alert('データがありません');
+            const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            let totalPts = 0;
+            records.forEach(r => { counts[r.rank]++; totalPts += r.pts; });
+            let csv = "\uFEFF時間,パーク,着順,消費Pt\n" + records.map(r => `${r.time},${r.parkName},${r.rank},${r.pts}`).join("\n");
+            csv += `\nチャージ総額,${chargeTotal}\n`;
+            csv += "1着,2着,3着,4着,合計Pt\n";
+            csv += `${counts[1]},${counts[2]},${counts[3]},${counts[4]},${totalPts}\n`;
+            const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `mj_log_${new Date().toLocaleDateString()}.csv`;
+            a.click();
+        }
+
+        function undo() { if(records.length && confirm('最新の記録を削除？')) { records.pop(); updateUI(); } }
+        function clearAll() { 
+            if(confirm('データを全削除します。チャージ記録もリセットされますがよろしいですか？')) { 
+                records = []; 
+                chargeTotal = 0;
+                localStorage.setItem('mj-charge-total', 0);
+                updateUI(); 
+            } 
+        }
+
+        renderParkSelectors();
+        updateUI();
+    </script>
+</body>
+</html>
