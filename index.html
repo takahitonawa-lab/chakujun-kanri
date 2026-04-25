@@ -119,7 +119,6 @@
         <div class="flex-1 overflow-y-auto bg-gray-900 rounded-t-2xl p-4">
             <div class="flex justify-between mb-2 items-center text-xs">
                 <span class="text-gray-400 font-bold tracking-wider">HISTORY</span>
-                <button onclick="undoRecord()" class="text-gray-600 underline">1つ取消</button>
             </div>
             <ul id="record-history" class="space-y-2 text-sm"></ul>
         </div>
@@ -368,7 +367,7 @@
                 const li = document.createElement('li');
                 li.className = `flex justify-between bg-gray-800 p-3 rounded-lg border-l-4 ${r.rank===1?'border-red-600':r.rank===4?'border-gray-500':'border-transparent'}`;
                 const d = new Date(r.created_at);
-                li.innerHTML = `<span class="font-bold">${r.rank}着</span><span class="text-[10px] text-orange-400 font-mono">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} -${r.pts}pt</span>`;
+                li.innerHTML = `<div class="flex items-center gap-2"><span class="font-black text-lg w-8">${r.rank}着</span><span class="text-[10px] text-orange-400 font-mono">${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')} -${r.pts}pt</span></div><div class="flex gap-1"><button onclick="editRecord('${r.id}')" class="bg-gray-700 text-[10px] px-2 py-1 rounded">編集</button><button onclick="deleteRecord('${r.id}')" class="bg-red-900 text-[10px] px-2 py-1 rounded">削除</button></div>`;
                 list.appendChild(li);
                 sumRank += r.rank; sumPts += r.pts;
             });
@@ -394,12 +393,26 @@
             else showToast('保存エラー: ' + (error?.message || ''));
         }
 
-        async function undoRecord() {
-            if (!currentRecords.length || !confirm('最新の記録を削除？')) return;
-            const last = currentRecords[currentRecords.length - 1];
-            await sb.from('records').delete().eq('id', last.id);
-            currentRecords.pop();
+        async function deleteRecord(id) {
+            if (!confirm('この記録を削除しますか？')) return;
+            await sb.from('records').delete().eq('id', id);
+            currentRecords = currentRecords.filter(r => r.id !== id);
             updateRecordUI();
+            showToast('削除しました');
+        }
+        async function editRecord(id) {
+            const rec = currentRecords.find(r => r.id === id);
+            if (!rec) return;
+            const newRank = parseInt(prompt('着順を入力（現在: ' + rec.rank + '着）\n1〜4の数字'));
+            if (!newRank || newRank < 1 || newRank > 4) { showToast('1〜4の数字を入力してください'); return; }
+            const park = currentVisit.park_config;
+            let pts = park.base || 0;
+            if (newRank === 1) pts += (park.p1 || 0);
+            if (newRank === 4) pts += (park.p4 || 0);
+            await sb.from('records').update({ rank: newRank, pts }).eq('id', id);
+            rec.rank = newRank; rec.pts = pts;
+            updateRecordUI();
+            showToast('更新しました');
         }
 
         function endVisit() {
