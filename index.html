@@ -165,7 +165,10 @@
                 <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
                 <h2 class="text-lg font-bold">来店詳細</h2>
             </div>
-            <button id="detail-edit-btn" onclick="toggleDetailEdit()" class="text-xs bg-gray-700 px-3 py-1 rounded">編集</button>
+            <div class="flex gap-2">
+                <button id="detail-edit-btn" onclick="toggleDetailEdit()" class="text-xs bg-gray-700 px-3 py-1 rounded">編集</button>
+                <button onclick="deleteVisit()" class="text-xs bg-red-900 px-3 py-1 rounded">削除</button>
+            </div>
         </div>
         <div id="visit-detail-content" class="flex-1 overflow-y-auto"></div>
     </div>
@@ -472,6 +475,16 @@
             document.getElementById('detail-edit-btn').innerText = detailEditMode ? '完了' : '編集';
             if (!detailEditMode) saveDetailChanges();
             renderDetailView();
+        }
+
+        async function deleteVisit() {
+            if (!confirm('この来店記録を削除しますか？\n着順記録も全て削除されます。')) return;
+            await sb.from('records').delete().eq('visit_id', detailVisit.id);
+            await sb.from('visits').delete().eq('id', detailVisit.id);
+            visits = visits.filter(v => v.id !== detailVisit.id);
+            renderHome();
+            showView('home-view');
+            showToast('削除しました');
         }
 
         async function saveDetailChanges() {
