@@ -127,7 +127,7 @@
     <script>
         const SUPABASE_URL = 'https://zxrmngokgjlaoszdkoix.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_oBTUmfUKUDsAwkZc-mUbbA_0cvDiEgu';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentUser = null;
         let records = [];
@@ -143,7 +143,7 @@
         // 初期化
         async function init() {
             showView('loading-view');
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await sb.auth.getSession();
             if (session) {
                 currentUser = session.user;
                 await loadFromSupabase();
@@ -152,7 +152,7 @@
                 showView('login-view');
             }
 
-            supabase.auth.onAuthStateChange(async (event, session) => {
+            sb.auth.onAuthStateChange(async (event, session) => {
                 if (event === 'SIGNED_IN' && session) {
                     currentUser = session.user;
                     await loadFromSupabase();
@@ -166,14 +166,14 @@
         }
 
         async function signInWithGoogle() {
-            await supabase.auth.signInWithOAuth({
+            await sb.auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: window.location.href }
             });
         }
 
         async function signOut() {
-            await supabase.auth.signOut();
+            await sb.auth.signOut();
         }
 
         // Supabaseからデータ読み込み
@@ -210,7 +210,7 @@
         // Supabaseにconfig保存
         async function saveToSupabase() {
             if (!currentUser) return;
-            await supabase.from('configs').upsert({
+            await sb.from('configs').upsert({
                 user_id: currentUser.id,
                 charge_total: chargeTotal,
                 initial_balance: initialBalance,
@@ -352,7 +352,7 @@
             if (rank === 1) pts += (park.p1 || 0);
             if (rank === 4) pts += (park.p4 || 0);
 
-            const { data, error } = await supabase.from('records').insert({
+            const { data, error } = await sb.from('records').insert({
                 user_id: currentUser.id,
                 rank,
                 park_name: park ? park.name : 'Unknown',
@@ -400,14 +400,14 @@
             if (!records.length) return;
             if (!confirm('最新の記録を削除？')) return;
             const last = records[records.length - 1];
-            await supabase.from('records').delete().eq('id', last.id);
+            await sb.from('records').delete().eq('id', last.id);
             records.pop();
             updateUI();
         }
 
         async function clearAll() {
             if (!confirm('データを全削除します。チャージ記録もリセットされますがよろしいですか？')) return;
-            await supabase.from('records').delete().eq('user_id', currentUser.id);
+            await sb.from('records').delete().eq('user_id', currentUser.id);
             records = [];
             chargeTotal = 0;
             await saveToSupabase();
