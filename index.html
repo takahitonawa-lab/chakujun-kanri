@@ -629,7 +629,20 @@
         function removePark(i) { if (confirm('削除しますか？')) { parkConfigs.splice(i, 1); renderSettings(); } }
         async function saveSettingsAndBack() { await saveConfigs(); showView('home-view'); renderHome(); }
 
-        init();
+// バックグラウンド復帰時の自動リロード
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        const lastHidden = parseInt(sessionStorage.getItem('lastHidden') || '0');
+        if (now - lastHidden > 5 * 60 * 1000) {
+            window.location.reload();
+        }
+    } else {
+        sessionStorage.setItem('lastHidden', Date.now().toString());
+    }
+});
+
+init();
     </script>
 </body>
 </html>
