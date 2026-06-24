@@ -46,8 +46,9 @@
             <div class="grid grid-cols-3 gap-2">
                 <div class="text-center"><p class="text-[10px] text-gray-400">来店回数</p><p id="total-visits" class="text-xl font-black text-white">0</p></div>
                 <div class="text-center border-x border-gray-700"><p class="text-[10px] text-gray-400">平均着順</p><p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p></div>
-                <div class="text-center"><p class="text-[10px] text-gray-400">累計収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">対人収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
             </div>
+            <div class="text-center mt-3 pt-3 border-t border-gray-700"><p class="text-[10px] text-gray-400">純収支（店代差引後）</p><p id="overall-net" class="text-xl font-black text-green-400">±0円</p></div>
         </div>
         <button onclick="startVisit()" class="w-full bg-yellow-500 text-black font-black py-5 rounded-2xl text-xl shadow-lg active:scale-95 transition-transform mb-4">来店開始</button>
         <div class="flex-1 overflow-y-auto">
@@ -148,8 +149,12 @@
                 <button onclick="adjustBalance('end', 10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+10,000</button>
             </div>
             <div class="flex justify-between items-center">
-                <p class="text-[10px] text-gray-400">今日の収支</p>
+                <p class="text-[10px] text-gray-400">対人収支</p>
                 <p id="end-profit" class="text-xl font-black text-green-400">-</p>
+            </div>
+            <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
+                <p class="text-[10px] text-gray-400">純収支（店代差引後）</p>
+                <p id="end-net" class="text-xl font-black text-green-400">-</p>
             </div>
         </div>
         <button onclick="confirmEndVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">保存して終了</button>
@@ -197,8 +202,8 @@
 
         let currentUser = null;
         let parkConfigs = [
-            { id: 0, name: 'パークA', base: 500, p1: 0, p4: 0 },
-            { id: 1, name: 'パークB', base: 300, p1: 0, p4: 100 }
+            { id: 0, name: 'パークA', type: 'game', base: 500, p1: 0, p4: 0, setFee: 0 },
+            { id: 1, name: 'パークB', type: 'game', base: 300, p1: 0, p4: 100, setFee: 0 }
         ];
         let selectedParkId = 0;
         let currentVisit = null; // Supabaseに保存済みのvisitオブジェクト
@@ -273,6 +278,14 @@
             return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
         }
 
+        // 課金タイプ判定とコスト計算
+        // セット型: 来店ごとの定額（setFee）。対局型: 対局ptの合計。
+        function isSetPark(park) { return !!park && park.type === 'set'; }
+        function visitCost(park, records) {
+            if (isSetPark(park)) return park.setFee || 0;
+            return (records || []).reduce((s, r) => s + (r.pts || 0), 0);
+        }
+
         // 残高調整ボタン
         function adjustBalance(type, delta) {
             const id = type === 'start' ? 'visit-start-balance' : 'visit-end-balance';
@@ -308,6 +321,10 @@
             const el = document.getElementById('overall-profit');
             el.innerText = `${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}円`;
             el.className = `text-xl font-black ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            const totalNet = visits.reduce((s,v) => s + ((v.profit||0) - (v.total_pts||0)), 0);
+            const elNet = document.getElementById('overall-net');
+            elNet.innerText = `${totalNet >= 0 ? '+' : ''}${totalNet.toLocaleString()}円`;
+            elNet.className = `text-xl font-black ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`;
             const list = document.getElementById('visit-history');
             list.innerHTML = visits.length === 0 ? '<p class="text-gray-600 text-sm text-center py-8">来店履歴がありません</p>' : '';
             visits.forEach(v => {
@@ -339,7 +356,7 @@
             parkConfigs.forEach(p => {
                 const btn = document.createElement('button');
                 btn.className = `py-3 rounded-lg text-sm font-bold transition-all bg-gray-700 ${selectedParkId === p.id ? 'active-park' : ''}`;
-                btn.innerHTML = `${esc(p.name)}<br><span class="font-normal text-[10px] opacity-70">${p.base}pt</span>`;
+                btn.innerHTML = `${esc(p.name)}<br><span class="font-normal text-[10px] opacity-70">${isSetPark(p) ? 'セット' + (p.setFee||0).toLocaleString() + '円' : (p.base||0) + 'pt'}</span>`;
                 btn.onclick = () => { selectedParkId = p.id; renderStartParkSelectors(); };
                 c.appendChild(btn);
             });
@@ -397,16 +414,20 @@
             });
             document.getElementById('visit-avg-rank').innerText = currentRecords.length > 0 ? (sumRank/currentRecords.length).toFixed(2) : '-';
             document.getElementById('visit-total-games').innerText = currentRecords.length;
-            document.getElementById('visit-total-pts').innerText = sumPts;
+            const recPark = currentVisit?.park_config;
+            document.getElementById('visit-total-pts').innerText = isSetPark(recPark) ? `${(recPark.setFee||0).toLocaleString()}円` : sumPts;
             document.getElementById('visit-charge-display').innerText = `${(currentVisit?.charge_total||0).toLocaleString()}円`;
         }
 
         async function addRecord(rank) {
             if (!currentVisit) return;
             const park = currentVisit.park_config;
-            let pts = park.base || 0;
-            if (rank === 1) pts += (park.p1 || 0);
-            if (rank === 4) pts += (park.p4 || 0);
+            let pts = 0;
+            if (!isSetPark(park)) {
+                pts = park.base || 0;
+                if (rank === 1) pts += (park.p1 || 0);
+                if (rank === 4) pts += (park.p4 || 0);
+            }
             const { data, error } = await sb.from('records').insert({
                 visit_id: currentVisit.id,
                 user_id: currentUser.id,
@@ -433,31 +454,37 @@
             document.getElementById('end-avg-rank').innerText = totalGames > 0 ? (sumRank/totalGames).toFixed(2) : '-';
             document.getElementById('visit-end-balance').value = '';
             document.getElementById('end-profit').innerText = '-';
+            document.getElementById('end-net').innerText = '-';
             showView('end-visit-view');
         }
 
         function calcEndProfit() {
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
             const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
+            const cost = visitCost(currentVisit.park_config, currentRecords);
+            const net = profit - cost;
             const el = document.getElementById('end-profit');
             el.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円`;
             el.className = `text-xl font-black ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            const elN = document.getElementById('end-net');
+            elN.innerText = `${net >= 0 ? '+' : ''}${net.toLocaleString()}円`;
+            elN.className = `text-xl font-black ${net >= 0 ? 'text-green-400' : 'text-red-400'}`;
         }
 
         async function confirmEndVisit() {
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
             const totalGames = currentRecords.length;
             const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
-            const sumPts = currentRecords.reduce((s,r)=>s+r.pts,0);
+            const cost = visitCost(currentVisit.park_config, currentRecords);
             const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
 
             await sb.from('visits').update({
                 end_balance: endBal, profit, total_games: totalGames,
                 avg_rank: totalGames > 0 ? sumRank/totalGames : null,
-                total_pts: sumPts, ended_at: new Date().toISOString()
+                total_pts: cost, ended_at: new Date().toISOString()
             }).eq('id', currentVisit.id);
 
-            const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: sumPts, ended_at: new Date().toISOString() };
+            const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: cost, ended_at: new Date().toISOString() };
             visits.unshift(updatedVisit);
             currentVisit = null; currentRecords = [];
             await saveConfigs();
@@ -501,7 +528,7 @@
             const totalGames = detailRecords.length;
             const sumRank = detailRecords.reduce((s,r)=>s+r.rank,0);
             const avgRank = totalGames > 0 ? sumRank/totalGames : null;
-            const totalPts = detailRecords.reduce((s,r)=>s+r.pts,0);
+            const totalPts = visitCost(detailVisit.park_config, detailRecords);
             detailVisit.profit = profit;
             detailVisit.total_games = totalGames;
             detailVisit.avg_rank = avgRank;
@@ -522,6 +549,9 @@
         function renderDetailView() {
             const v = detailVisit;
             const profit = (v.end_balance||0) - (v.start_balance||0) - (v.charge_total||0);
+            const cost = visitCost(v.park_config, detailRecords);
+            const net = profit - cost;
+            const costDisplay = isSetPark(v.park_config) ? `${cost.toLocaleString()}円` : `${cost}pt`;
             const d = new Date(v.started_at);
             const edit = detailEditMode;
 
@@ -555,11 +585,12 @@
                     ${edit ? `<input type="text" value="${esc(v.park_name)}" onchange="detailVisit.park_name=this.value" class="w-full bg-gray-700 p-2 rounded text-sm font-bold outline-none mb-1">` : `<p class="font-bold text-lg">${esc(v.park_name)}</p>`}
                     <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}</p>
                 </div>
+                <div class="bg-gray-800 rounded-xl p-4 mb-3 text-center"><p class="text-[10px] text-gray-400">純収支（店代差引後）</p><p class="text-2xl font-black ${net>=0?'text-green-400':'text-red-400'}">${net>=0?'+':''}${net.toLocaleString()}円</p></div>
                 <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">収支</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対人収支</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${costDisplay}</p></div>
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">平均着順</p><p class="text-2xl font-black text-yellow-500">${detailRecords.length>0?(detailRecords.reduce((s,r)=>s+r.rank,0)/detailRecords.length).toFixed(2):'-'}</p></div>
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${detailRecords.length}</p></div>
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${detailRecords.reduce((s,r)=>s+r.pts,0)}pt</p></div>
                 </div>
                 <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm space-y-3">
                     <div>
@@ -613,23 +644,36 @@
             parkConfigs.forEach((park, i) => {
                 const div = document.createElement('div');
                 div.className = 'bg-gray-800 p-4 rounded-xl space-y-3 relative';
+                const setMode = isSetPark(park);
                 div.innerHTML = `
                     <button onclick="removePark(${i})" class="absolute top-2 right-2 text-red-500 text-[10px] font-bold">削除</button>
                     <div><label class="text-[10px] text-gray-500 uppercase font-bold">パーク名</label>
                     <input type="text" value="${esc(park.name)}" onchange="parkConfigs[${i}].name=this.value" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none"></div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase font-bold block mb-1">課金タイプ</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="setParkType(${i},'game')" class="py-2 rounded text-xs font-bold ${!setMode?'bg-yellow-500 text-black':'bg-gray-700 text-gray-300'}">対局ごと</button>
+                            <button onclick="setParkType(${i},'set')" class="py-2 rounded text-xs font-bold ${setMode?'bg-yellow-500 text-black':'bg-gray-700 text-gray-300'}">セット</button>
+                        </div>
+                    </div>
+                    ${setMode ? `
+                    <div><label class="text-[10px] text-gray-500 uppercase font-bold">セット代（来店ごと・円）</label>
+                    <input type="number" value="${park.setFee||0}" onchange="parkConfigs[${i}].setFee=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                    ` : `
                     <div class="grid grid-cols-3 gap-2">
                         <div><label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
-                        <input type="number" value="${park.base}" onchange="parkConfigs[${i}].base=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                        <input type="number" value="${park.base||0}" onchange="parkConfigs[${i}].base=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
                         <div><label class="text-[10px] text-gray-500 uppercase font-bold">1着祝儀</label>
                         <input type="number" value="${park.p1||0}" onchange="parkConfigs[${i}].p1=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
                         <div><label class="text-[10px] text-gray-500 uppercase font-bold">4着ペナ</label>
                         <input type="number" value="${park.p4||0}" onchange="parkConfigs[${i}].p4=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
-                    </div>`;
+                    </div>`}`;
                 c.appendChild(div);
             });
         }
 
-        function addNewPark() { parkConfigs.push({ id: Date.now(), name: 'NEW PARK', base: 0, p1: 0, p4: 0 }); renderSettings(); }
+        function addNewPark() { parkConfigs.push({ id: Date.now(), name: 'NEW PARK', type: 'game', base: 0, p1: 0, p4: 0, setFee: 0 }); renderSettings(); }
+        function setParkType(i, type) { parkConfigs[i].type = type; renderSettings(); }
         function removePark(i) { if (confirm('削除しますか？')) { parkConfigs.splice(i, 1); renderSettings(); } }
         async function saveSettingsAndBack() { await saveConfigs(); showView('home-view'); renderHome(); }
 
