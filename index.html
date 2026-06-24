@@ -29,6 +29,7 @@
             <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
             Googleでログイン
         </button>
+        <p class="text-[10px] text-gray-500 text-center px-8 leading-relaxed">続行すると<a href="/privacy.html" target="_blank" rel="noopener" class="underline text-gray-400">プライバシーポリシー</a>と<a href="/terms.html" target="_blank" rel="noopener" class="underline text-gray-400">利用規約</a>に同意したものとみなされます。</p>
     </div>
 
     <!-- ホーム -->
@@ -151,10 +152,6 @@
                 <p id="end-profit" class="text-xl font-black text-green-400">-</p>
             </div>
         </div>
-        <div class="bg-gray-800 rounded-xl p-4 mb-6">
-            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">メモ（任意）</label>
-            <textarea id="visit-memo" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-sm text-white outline-none focus:border-yellow-500 resize-none" rows="3" placeholder="今日の振り返りなど..."></textarea>
-        </div>
         <button onclick="confirmEndVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">保存して終了</button>
     </div>
 
@@ -181,6 +178,16 @@
         </div>
         <div id="park-settings-list" class="space-y-6 mb-6"></div>
         <button onclick="addNewPark()" class="w-full py-4 border-2 border-dashed border-gray-600 rounded-xl text-gray-400 font-bold">+ パークを追加</button>
+
+        <div class="mt-10 pt-6 border-t border-gray-700">
+            <p class="text-[10px] text-red-400 uppercase tracking-wider mb-2 font-bold">アカウント削除</p>
+            <p class="text-[11px] text-gray-500 mb-3 leading-relaxed">あなたの全ての記録・設定を完全に削除します。この操作は取り消せません。</p>
+            <button onclick="deleteAccount()" class="w-full py-3 border-2 border-red-800 rounded-xl text-red-400 font-bold">アカウントと全データを削除</button>
+        </div>
+
+        <p class="text-[10px] text-gray-600 text-center mt-8 mb-2">
+            <a href="/privacy.html" target="_blank" rel="noopener" class="underline">プライバシーポリシー</a> ・ <a href="/terms.html" target="_blank" rel="noopener" class="underline">利用規約</a>
+        </p>
     </div>
 
     <script>
@@ -261,6 +268,11 @@
             setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translate(-50%, -10px)'; }, 2000);
         }
 
+        // 自由入力値を innerHTML/属性に展開する際のHTMLエスケープ（XSS防止）
+        function esc(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+
         // 残高調整ボタン
         function adjustBalance(type, delta) {
             const id = type === 'start' ? 'visit-start-balance' : 'visit-end-balance';
@@ -304,9 +316,8 @@
                 const d = new Date(v.started_at);
                 const profit = v.profit || 0;
                 li.innerHTML = `<div class="flex justify-between items-start">
-                    <div><p class="font-bold text-sm">${v.park_name}</p>
-                    <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ・ ${v.total_games||0}戦 ・ 平均${v.avg_rank ? v.avg_rank.toFixed(2) : '-'}着</p>
-                    ${v.memo ? `<p class="text-[10px] text-gray-500 mt-1">${v.memo}</p>` : ''}</div>
+                    <div><p class="font-bold text-sm">${esc(v.park_name)}</p>
+                    <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ・ ${v.total_games||0}戦 ・ 平均${v.avg_rank ? v.avg_rank.toFixed(2) : '-'}着</p></div>
                     <p class="font-black text-lg ${profit >= 0 ? 'text-green-400' : 'text-red-400'}">${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円</p>
                 </div>`;
                 li.onclick = () => showVisitDetail(v);
@@ -328,7 +339,7 @@
             parkConfigs.forEach(p => {
                 const btn = document.createElement('button');
                 btn.className = `py-3 rounded-lg text-sm font-bold transition-all bg-gray-700 ${selectedParkId === p.id ? 'active-park' : ''}`;
-                btn.innerHTML = `${p.name}<br><span class="font-normal text-[10px] opacity-70">${p.base}pt</span>`;
+                btn.innerHTML = `${esc(p.name)}<br><span class="font-normal text-[10px] opacity-70">${p.base}pt</span>`;
                 btn.onclick = () => { selectedParkId = p.id; renderStartParkSelectors(); };
                 c.appendChild(btn);
             });
@@ -422,7 +433,6 @@
             document.getElementById('end-avg-rank').innerText = totalGames > 0 ? (sumRank/totalGames).toFixed(2) : '-';
             document.getElementById('visit-end-balance').value = '';
             document.getElementById('end-profit').innerText = '-';
-            document.getElementById('visit-memo').value = '';
             showView('end-visit-view');
         }
 
@@ -436,7 +446,6 @@
 
         async function confirmEndVisit() {
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
-            const memo = document.getElementById('visit-memo').value;
             const totalGames = currentRecords.length;
             const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
             const sumPts = currentRecords.reduce((s,r)=>s+r.pts,0);
@@ -445,10 +454,10 @@
             await sb.from('visits').update({
                 end_balance: endBal, profit, total_games: totalGames,
                 avg_rank: totalGames > 0 ? sumRank/totalGames : null,
-                total_pts: sumPts, memo, ended_at: new Date().toISOString()
+                total_pts: sumPts, ended_at: new Date().toISOString()
             }).eq('id', currentVisit.id);
 
-            const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: sumPts, memo, ended_at: new Date().toISOString() };
+            const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: sumPts, ended_at: new Date().toISOString() };
             visits.unshift(updatedVisit);
             currentVisit = null; currentRecords = [];
             await saveConfigs();
@@ -502,8 +511,7 @@
                 start_balance: detailVisit.start_balance,
                 end_balance: detailVisit.end_balance,
                 charge_total: detailVisit.charge_total,
-                profit, total_games: totalGames, avg_rank: avgRank, total_pts: totalPts,
-                memo: detailVisit.memo
+                profit, total_games: totalGames, avg_rank: avgRank, total_pts: totalPts
             }).eq('id', detailVisit.id);
             const idx = visits.findIndex(v => v.id === detailVisit.id);
             if (idx >= 0) visits[idx] = { ...detailVisit };
@@ -544,7 +552,7 @@
 
             document.getElementById('visit-detail-content').innerHTML = `
                 <div class="bg-gray-800 rounded-xl p-4 mb-4">
-                    ${edit ? `<input type="text" value="${v.park_name}" onchange="detailVisit.park_name=this.value" class="w-full bg-gray-700 p-2 rounded text-sm font-bold outline-none mb-1">` : `<p class="font-bold text-lg">${v.park_name}</p>`}
+                    ${edit ? `<input type="text" value="${esc(v.park_name)}" onchange="detailVisit.park_name=this.value" class="w-full bg-gray-700 p-2 rounded text-sm font-bold outline-none mb-1">` : `<p class="font-bold text-lg">${esc(v.park_name)}</p>`}
                     <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}</p>
                 </div>
                 <div class="grid grid-cols-2 gap-3 mb-4">
@@ -566,10 +574,6 @@
                         <p class="text-[10px] text-gray-400 mb-1">追加チャージ</p>
                         ${edit ? `<input type="number" value="${v.charge_total||0}" onchange="detailVisit.charge_total=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('charge_total')}` : `<p class="text-white">${(v.charge_total||0).toLocaleString()}円</p>`}
                     </div>
-                </div>
-                <div class="bg-gray-800 rounded-xl p-4 mb-4">
-                    <p class="text-[10px] text-gray-400 mb-2">メモ</p>
-                    ${edit ? `<textarea onchange="detailVisit.memo=this.value" class="w-full bg-gray-700 p-2 rounded text-sm outline-none text-white resize-none" rows="3">${v.memo||''}</textarea>` : `<p class="text-sm text-white">${v.memo||'なし'}</p>`}
                 </div>
                 ${detailRecords.length > 0 ? `
                 <div class="bg-gray-800 rounded-xl p-4 mb-4">
@@ -612,7 +616,7 @@
                 div.innerHTML = `
                     <button onclick="removePark(${i})" class="absolute top-2 right-2 text-red-500 text-[10px] font-bold">削除</button>
                     <div><label class="text-[10px] text-gray-500 uppercase font-bold">パーク名</label>
-                    <input type="text" value="${park.name}" onchange="parkConfigs[${i}].name=this.value" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none"></div>
+                    <input type="text" value="${esc(park.name)}" onchange="parkConfigs[${i}].name=this.value" class="w-full bg-gray-700 p-3 rounded text-sm mt-1 outline-none"></div>
                     <div class="grid grid-cols-3 gap-2">
                         <div><label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
                         <input type="number" value="${park.base}" onchange="parkConfigs[${i}].base=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
@@ -629,20 +633,40 @@
         function removePark(i) { if (confirm('削除しますか？')) { parkConfigs.splice(i, 1); renderSettings(); } }
         async function saveSettingsAndBack() { await saveConfigs(); showView('home-view'); renderHome(); }
 
-// バックグラウンド復帰時の自動リロード
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        const now = Date.now();
-        const lastHidden = parseInt(sessionStorage.getItem('lastHidden') || '0');
-        if (now - lastHidden > 5 * 60 * 1000) {
-            window.location.reload();
+        // アカウント・全データ削除（退会）。RLSにより自分の行のみ削除される。
+        // 注: ログイン情報そのもの（auth.users）の削除はサーバ側処理が必要なため、
+        //     ここではアプリ内データを全削除しサインアウトする。完全な連携解除は窓口対応。
+        async function deleteAccount() {
+            if (!currentUser) return;
+            if (!confirm('本当にアカウントと全データを削除しますか？\nすべての記録・設定が削除され、元に戻せません。')) return;
+            if (!confirm('最終確認：すべて削除して退会します。よろしいですか？')) return;
+            const uid = currentUser.id;
+            const r1 = await sb.from('records').delete().eq('user_id', uid);
+            const r2 = await sb.from('visits').delete().eq('user_id', uid);
+            const r3 = await sb.from('configs').delete().eq('user_id', uid);
+            if (r1.error || r2.error || r3.error) {
+                showToast('削除中にエラーが発生しました。時間をおいて再度お試しください。');
+                return;
+            }
+            visits = []; currentVisit = null; currentRecords = [];
+            await sb.auth.signOut();
+            alert('全データを削除しました。\nログイン情報（Googleアカウント連携）自体の削除をご希望の場合は、プライバシーポリシー記載の窓口までご連絡ください。');
         }
-    } else {
-        sessionStorage.setItem('lastHidden', Date.now().toString());
-    }
-});
 
-init();
+        // バックグラウンド復帰時の自動リロード
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                const now = Date.now();
+                const lastHidden = parseInt(sessionStorage.getItem('lastHidden') || '0');
+                if (now - lastHidden > 5 * 60 * 1000) {
+                    window.location.reload();
+                }
+            } else {
+                sessionStorage.setItem('lastHidden', Date.now().toString());
+            }
+        });
+
+        init();
     </script>
 </body>
 </html>
