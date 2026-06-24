@@ -139,6 +139,10 @@
                 <div><p class="text-[10px] text-gray-400">平均着順</p><p id="end-avg-rank" class="text-2xl font-black text-yellow-500">-</p></div>
             </div>
         </div>
+        <div id="set-fee-card" class="hidden bg-gray-800 rounded-xl p-4 mb-4">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">セット代（店代・退店時に確定）</label>
+            <input type="number" id="visit-set-fee" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center" placeholder="0">
+        </div>
         <div class="bg-gray-800 rounded-xl p-4 mb-4">
             <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">退店時残高</label>
             <input type="number" id="visit-end-balance" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="0">
@@ -356,7 +360,7 @@
             parkConfigs.forEach(p => {
                 const btn = document.createElement('button');
                 btn.className = `py-3 rounded-lg text-sm font-bold transition-all bg-gray-700 ${selectedParkId === p.id ? 'active-park' : ''}`;
-                btn.innerHTML = `${esc(p.name)}<br><span class="font-normal text-[10px] opacity-70">${isSetPark(p) ? 'セット' + (p.setFee||0).toLocaleString() + '円' : (p.base||0) + 'pt'}</span>`;
+                btn.innerHTML = `${esc(p.name)}<br><span class="font-normal text-[10px] opacity-70">${isSetPark(p) ? 'セット' : (p.base||0) + 'pt'}</span>`;
                 btn.onclick = () => { selectedParkId = p.id; renderStartParkSelectors(); };
                 c.appendChild(btn);
             });
@@ -415,7 +419,7 @@
             document.getElementById('visit-avg-rank').innerText = currentRecords.length > 0 ? (sumRank/currentRecords.length).toFixed(2) : '-';
             document.getElementById('visit-total-games').innerText = currentRecords.length;
             const recPark = currentVisit?.park_config;
-            document.getElementById('visit-total-pts').innerText = isSetPark(recPark) ? `${(recPark.setFee||0).toLocaleString()}円` : sumPts;
+            document.getElementById('visit-total-pts').innerText = isSetPark(recPark) ? '—' : sumPts;
             document.getElementById('visit-charge-display').innerText = `${(currentVisit?.charge_total||0).toLocaleString()}円`;
         }
 
@@ -455,13 +459,17 @@
             document.getElementById('visit-end-balance').value = '';
             document.getElementById('end-profit').innerText = '-';
             document.getElementById('end-net').innerText = '-';
+            const setCard = document.getElementById('set-fee-card');
+            document.getElementById('visit-set-fee').value = '';
+            if (isSetPark(currentVisit?.park_config)) setCard.classList.remove('hidden');
+            else setCard.classList.add('hidden');
             showView('end-visit-view');
         }
 
         function calcEndProfit() {
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
             const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
-            const cost = visitCost(currentVisit.park_config, currentRecords);
+            const cost = isSetPark(currentVisit.park_config) ? (parseInt(document.getElementById('visit-set-fee').value)||0) : currentRecords.reduce((s,r)=>s+(r.pts||0),0);
             const net = profit - cost;
             const el = document.getElementById('end-profit');
             el.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円`;
@@ -475,13 +483,15 @@
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
             const totalGames = currentRecords.length;
             const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
-            const cost = visitCost(currentVisit.park_config, currentRecords);
+            const isSet = isSetPark(currentVisit.park_config);
+            const cost = isSet ? (parseInt(document.getElementById('visit-set-fee').value)||0) : currentRecords.reduce((s,r)=>s+(r.pts||0),0);
+            if (isSet) currentVisit.park_config = { ...currentVisit.park_config, setFee: cost };
             const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
 
             await sb.from('visits').update({
                 end_balance: endBal, profit, total_games: totalGames,
                 avg_rank: totalGames > 0 ? sumRank/totalGames : null,
-                total_pts: cost, ended_at: new Date().toISOString()
+                total_pts: cost, park_config: currentVisit.park_config, ended_at: new Date().toISOString()
             }).eq('id', currentVisit.id);
 
             const updatedVisit = { ...currentVisit, end_balance: endBal, profit, total_games: totalGames, avg_rank: totalGames > 0 ? sumRank/totalGames : null, total_pts: cost, ended_at: new Date().toISOString() };
@@ -657,8 +667,7 @@
                         </div>
                     </div>
                     ${setMode ? `
-                    <div><label class="text-[10px] text-gray-500 uppercase font-bold">セット代（来店ごと・円）</label>
-                    <input type="number" value="${park.setFee||0}" onchange="parkConfigs[${i}].setFee=parseInt(this.value)||0" class="w-full bg-gray-700 p-2 rounded text-xs mt-1"></div>
+                    <div class="bg-gray-900 rounded p-3 text-[11px] text-gray-400 leading-relaxed">セット代は変動するため<b class="text-gray-200">退店時に入力</b>します。対局は着順のみ記録（pt加算なし）。</div>
                     ` : `
                     <div class="grid grid-cols-3 gap-2">
                         <div><label class="text-[10px] text-gray-500 uppercase font-bold">基本参加費</label>
