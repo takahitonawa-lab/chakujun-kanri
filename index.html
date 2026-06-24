@@ -67,7 +67,7 @@
             <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">パーク選択</label>
             <div id="start-park-selectors" class="grid grid-cols-2 gap-2"></div>
         </div>
-        <div class="bg-gray-800 rounded-xl p-4 mb-6">
+        <div id="start-balance-card" class="bg-gray-800 rounded-xl p-4 mb-6">
             <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">入店時残高</label>
             <input type="number" id="visit-start-balance" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="10000">
             <div class="grid grid-cols-4 gap-2">
@@ -96,7 +96,7 @@
                 <div class="text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p id="visit-total-pts" class="text-2xl font-black text-orange-500">0</p></div>
             </div>
             <!-- 追加チャージ -->
-            <div class="bg-gray-900 p-3 rounded-lg">
+            <div id="record-charge-card" class="bg-gray-900 p-3 rounded-lg">
                 <div class="flex justify-between items-center mb-2">
                     <p class="text-[9px] text-gray-500 uppercase">追加チャージ</p>
                     <div class="flex items-center gap-2">
@@ -371,12 +371,15 @@
                 btn.onclick = () => { selectedParkId = p.id; renderStartParkSelectors(); };
                 c.appendChild(btn);
             });
+            const selPark = parkConfigs.find(p => p.id === selectedParkId);
+            document.getElementById('start-balance-card').classList.toggle('hidden', isSetPark(selPark));
         }
 
         async function confirmStartVisit() {
             const park = parkConfigs.find(p => p.id === selectedParkId) || parkConfigs[0];
-            const startBal = parseInt(document.getElementById('visit-start-balance').value) || 0;
-            lastStartBalance = startBal;
+            const isSet = isSetPark(park);
+            const startBal = isSet ? 0 : (parseInt(document.getElementById('visit-start-balance').value) || 0);
+            if (!isSet) lastStartBalance = startBal;
 
             // まずSupabaseにvisitを保存してUUIDを取得
             const { data: newVisit, error } = await sb.from('visits').insert({
@@ -427,6 +430,7 @@
             document.getElementById('visit-total-games').innerText = currentRecords.length;
             const recPark = currentVisit?.park_config;
             document.getElementById('visit-total-pts').innerText = isSetPark(recPark) ? '—' : sumPts;
+            document.getElementById('record-charge-card').classList.toggle('hidden', isSetPark(recPark));
             document.getElementById('visit-charge-display').innerText = `${(currentVisit?.charge_total||0).toLocaleString()}円`;
         }
 
@@ -619,6 +623,11 @@
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${detailRecords.length}</p></div>
                 </div>
                 <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm space-y-3">
+                    ${setMode ? `
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">セット料金（場代）</p>
+                        <p class="text-white">${(v.total_pts||0).toLocaleString()}円</p>
+                    </div>` : `
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">入店残高</p>
                         ${edit ? `<input type="number" value="${v.start_balance||0}" onchange="detailVisit.start_balance=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('start_balance')}` : `<p class="text-white">${(v.start_balance||0).toLocaleString()}円</p>`}
@@ -630,7 +639,7 @@
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">追加チャージ</p>
                         ${edit ? `<input type="number" value="${v.charge_total||0}" onchange="detailVisit.charge_total=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('charge_total')}` : `<p class="text-white">${(v.charge_total||0).toLocaleString()}円</p>`}
-                    </div>
+                    </div>`}
                 </div>
                 ${detailRecords.length > 0 ? `
                 <div class="bg-gray-800 rounded-xl p-4 mb-4">
