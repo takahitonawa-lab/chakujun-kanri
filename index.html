@@ -46,9 +46,9 @@
             <div class="grid grid-cols-3 gap-2">
                 <div class="text-center"><p class="text-[10px] text-gray-400">来店回数</p><p id="total-visits" class="text-xl font-black text-white">0</p></div>
                 <div class="text-center border-x border-gray-700"><p class="text-[10px] text-gray-400">平均着順</p><p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p></div>
-                <div class="text-center"><p class="text-[10px] text-gray-400">対人収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">純収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
             </div>
-            <div class="text-center mt-3 pt-3 border-t border-gray-700"><p class="text-[10px] text-gray-400">純収支（店代差引後）</p><p id="overall-net" class="text-xl font-black text-green-400">±0円</p></div>
+            <div class="text-center mt-3 pt-3 border-t border-gray-700"><p class="text-[10px] text-gray-400">対人収支（場代足し戻し）</p><p id="overall-net" class="text-lg font-black text-gray-300">±0円</p></div>
         </div>
         <button onclick="startVisit()" class="w-full bg-yellow-500 text-black font-black py-5 rounded-2xl text-xl shadow-lg active:scale-95 transition-transform mb-4">来店開始</button>
         <div class="flex-1 overflow-y-auto">
@@ -139,11 +139,8 @@
                 <div><p class="text-[10px] text-gray-400">平均着順</p><p id="end-avg-rank" class="text-2xl font-black text-yellow-500">-</p></div>
             </div>
         </div>
-        <div id="set-fee-card" class="hidden bg-gray-800 rounded-xl p-4 mb-4">
-            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">セット代（店代・退店時に確定）</label>
-            <input type="number" id="visit-set-fee" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center" placeholder="0">
-        </div>
-        <div class="bg-gray-800 rounded-xl p-4 mb-4">
+        <!-- 対局型：残高ベース -->
+        <div id="game-end-card" class="hidden bg-gray-800 rounded-xl p-4 mb-4">
             <label class="text-[10px] text-gray-400 uppercase font-bold block mb-3">退店時残高</label>
             <input type="number" id="visit-end-balance" oninput="calcEndProfit()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="0">
             <div class="grid grid-cols-4 gap-2 mb-3">
@@ -153,12 +150,23 @@
                 <button onclick="adjustBalance('end', 10000)" class="bg-gray-700 py-2 rounded text-xs font-bold text-green-400">+10,000</button>
             </div>
             <div class="flex justify-between items-center">
-                <p class="text-[10px] text-gray-400">対人収支</p>
-                <p id="end-profit" class="text-xl font-black text-green-400">-</p>
+                <p class="text-[10px] text-gray-400">純収支（手残り）</p>
+                <p id="end-net" class="text-xl font-black text-green-400">-</p>
             </div>
             <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
-                <p class="text-[10px] text-gray-400">純収支（店代差引後）</p>
-                <p id="end-net" class="text-xl font-black text-green-400">-</p>
+                <p class="text-[10px] text-gray-400">対人収支（場代足し戻し）</p>
+                <p id="end-taijin" class="text-xl font-black text-gray-300">-</p>
+            </div>
+        </div>
+        <!-- セット型：純収支＋セット料金を直接入力 -->
+        <div id="set-end-card" class="hidden bg-gray-800 rounded-xl p-4 mb-4">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">純収支（手残り・マイナス可）</label>
+            <input type="number" id="visit-set-net" oninput="calcSetResult()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-4" placeholder="0">
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">セット料金（場代）</label>
+            <input type="number" id="visit-set-fee" oninput="calcSetResult()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="0">
+            <div class="flex justify-between items-center pt-2 border-t border-gray-700">
+                <p class="text-[10px] text-gray-400">対人収支（逆引き）</p>
+                <p id="set-taijin" class="text-xl font-black text-gray-300">-</p>
             </div>
         </div>
         <button onclick="confirmEndVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">保存して終了</button>
@@ -325,10 +333,9 @@
             const el = document.getElementById('overall-profit');
             el.innerText = `${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}円`;
             el.className = `text-xl font-black ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
-            const totalNet = visits.reduce((s,v) => s + ((v.profit||0) - (v.total_pts||0)), 0);
+            const totalTaijin = visits.reduce((s,v) => s + ((v.profit||0) + (v.total_pts||0)), 0);
             const elNet = document.getElementById('overall-net');
-            elNet.innerText = `${totalNet >= 0 ? '+' : ''}${totalNet.toLocaleString()}円`;
-            elNet.className = `text-xl font-black ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            elNet.innerText = `${totalTaijin >= 0 ? '+' : ''}${totalTaijin.toLocaleString()}円`;
             const list = document.getElementById('visit-history');
             list.innerHTML = visits.length === 0 ? '<p class="text-gray-600 text-sm text-center py-8">来店履歴がありません</p>' : '';
             visits.forEach(v => {
@@ -456,37 +463,44 @@
             const sumRank = currentRecords.reduce((s,r) => s+r.rank, 0);
             document.getElementById('end-total-games').innerText = totalGames;
             document.getElementById('end-avg-rank').innerText = totalGames > 0 ? (sumRank/totalGames).toFixed(2) : '-';
+            const setMode = isSetPark(currentVisit?.park_config);
             document.getElementById('visit-end-balance').value = '';
-            document.getElementById('end-profit').innerText = '-';
-            document.getElementById('end-net').innerText = '-';
-            const setCard = document.getElementById('set-fee-card');
+            document.getElementById('visit-set-net').value = '';
             document.getElementById('visit-set-fee').value = '';
-            if (isSetPark(currentVisit?.park_config)) setCard.classList.remove('hidden');
-            else setCard.classList.add('hidden');
+            document.getElementById('end-net').innerText = '-';
+            document.getElementById('end-taijin').innerText = '-';
+            document.getElementById('set-taijin').innerText = '-';
+            document.getElementById('game-end-card').classList.toggle('hidden', setMode);
+            document.getElementById('set-end-card').classList.toggle('hidden', !setMode);
             showView('end-visit-view');
         }
 
         function calcEndProfit() {
             const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
-            const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
-            const cost = isSetPark(currentVisit.park_config) ? (parseInt(document.getElementById('visit-set-fee').value)||0) : currentRecords.reduce((s,r)=>s+(r.pts||0),0);
-            const net = profit - cost;
-            const el = document.getElementById('end-profit');
-            el.innerText = `${profit >= 0 ? '+' : ''}${profit.toLocaleString()}円`;
-            el.className = `text-xl font-black ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            const net = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
+            const cost = currentRecords.reduce((s,r)=>s+(r.pts||0),0);
+            const taijin = net + cost;
             const elN = document.getElementById('end-net');
             elN.innerText = `${net >= 0 ? '+' : ''}${net.toLocaleString()}円`;
             elN.className = `text-xl font-black ${net >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            document.getElementById('end-taijin').innerText = `${taijin >= 0 ? '+' : ''}${taijin.toLocaleString()}円`;
+        }
+
+        function calcSetResult() {
+            const net = parseInt(document.getElementById('visit-set-net').value) || 0;
+            const fee = parseInt(document.getElementById('visit-set-fee').value) || 0;
+            const taijin = net + fee;
+            document.getElementById('set-taijin').innerText = `${taijin >= 0 ? '+' : ''}${taijin.toLocaleString()}円`;
         }
 
         async function confirmEndVisit() {
-            const endBal = parseInt(document.getElementById('visit-end-balance').value) || 0;
             const totalGames = currentRecords.length;
             const sumRank = currentRecords.reduce((s,r)=>s+r.rank,0);
             const isSet = isSetPark(currentVisit.park_config);
             const cost = isSet ? (parseInt(document.getElementById('visit-set-fee').value)||0) : currentRecords.reduce((s,r)=>s+(r.pts||0),0);
             if (isSet) currentVisit.park_config = { ...currentVisit.park_config, setFee: cost };
-            const profit = endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0);
+            const endBal = isSet ? 0 : (parseInt(document.getElementById('visit-end-balance').value) || 0);
+            const profit = isSet ? (parseInt(document.getElementById('visit-set-net').value)||0) : (endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0));
 
             await sb.from('visits').update({
                 end_balance: endBal, profit, total_games: totalGames,
@@ -534,11 +548,12 @@
         }
 
         async function saveDetailChanges() {
-            const profit = (detailVisit.end_balance||0) - (detailVisit.start_balance||0) - (detailVisit.charge_total||0);
+            const setMode = isSetPark(detailVisit.park_config);
+            const profit = setMode ? (detailVisit.profit||0) : ((detailVisit.end_balance||0) - (detailVisit.start_balance||0) - (detailVisit.charge_total||0));
             const totalGames = detailRecords.length;
             const sumRank = detailRecords.reduce((s,r)=>s+r.rank,0);
             const avgRank = totalGames > 0 ? sumRank/totalGames : null;
-            const totalPts = visitCost(detailVisit.park_config, detailRecords);
+            const totalPts = setMode ? (detailVisit.total_pts||0) : detailRecords.reduce((s,r)=>s+(r.pts||0),0);
             detailVisit.profit = profit;
             detailVisit.total_games = totalGames;
             detailVisit.avg_rank = avgRank;
@@ -558,10 +573,11 @@
 
         function renderDetailView() {
             const v = detailVisit;
-            const profit = (v.end_balance||0) - (v.start_balance||0) - (v.charge_total||0);
-            const cost = visitCost(v.park_config, detailRecords);
-            const net = profit - cost;
-            const costDisplay = isSetPark(v.park_config) ? `${cost.toLocaleString()}円` : `${cost}pt`;
+            const setMode = isSetPark(v.park_config);
+            const profit = setMode ? (v.profit||0) : ((v.end_balance||0) - (v.start_balance||0) - (v.charge_total||0));
+            const cost = setMode ? (v.total_pts||0) : detailRecords.reduce((s,r)=>s+(r.pts||0),0);
+            const taijin = profit + cost;
+            const costDisplay = setMode ? `${cost.toLocaleString()}円` : `${cost}pt`;
             const d = new Date(v.started_at);
             const edit = detailEditMode;
 
@@ -595,9 +611,9 @@
                     ${edit ? `<input type="text" value="${esc(v.park_name)}" onchange="detailVisit.park_name=this.value" class="w-full bg-gray-700 p-2 rounded text-sm font-bold outline-none mb-1">` : `<p class="font-bold text-lg">${esc(v.park_name)}</p>`}
                     <p class="text-[10px] text-gray-400">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}</p>
                 </div>
-                <div class="bg-gray-800 rounded-xl p-4 mb-3 text-center"><p class="text-[10px] text-gray-400">純収支（店代差引後）</p><p class="text-2xl font-black ${net>=0?'text-green-400':'text-red-400'}">${net>=0?'+':''}${net.toLocaleString()}円</p></div>
+                <div class="bg-gray-800 rounded-xl p-4 mb-3 text-center"><p class="text-[10px] text-gray-400">純収支（手残り）</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
                 <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対人収支</p><p class="text-2xl font-black ${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</p></div>
+                    <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対人収支</p><p class="text-2xl font-black ${taijin>=0?'text-green-400':'text-red-400'}">${taijin>=0?'+':''}${taijin.toLocaleString()}円</p></div>
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">消費コスト</p><p class="text-2xl font-black text-orange-500">${costDisplay}</p></div>
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">平均着順</p><p class="text-2xl font-black text-yellow-500">${detailRecords.length>0?(detailRecords.reduce((s,r)=>s+r.rank,0)/detailRecords.length).toFixed(2):'-'}</p></div>
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${detailRecords.length}</p></div>
