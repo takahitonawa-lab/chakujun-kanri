@@ -43,12 +43,15 @@
         </div>
         <div class="bg-gray-800 rounded-xl p-4 mb-4">
             <p class="text-[10px] text-gray-400 mb-2 uppercase tracking-wider">累計</p>
-            <div class="grid grid-cols-3 gap-2">
+            <div class="text-center mb-3">
+                <p class="text-[10px] text-gray-400 mb-1">純収支</p>
+                <p id="overall-profit" class="text-4xl font-black text-green-400">±0円</p>
+            </div>
+            <div class="grid grid-cols-3 gap-2 pt-3 border-t border-gray-700">
                 <div class="text-center"><p class="text-[10px] text-gray-400">来店回数</p><p id="total-visits" class="text-xl font-black text-white">0</p></div>
                 <div class="text-center border-x border-gray-700"><p class="text-[10px] text-gray-400">平均着順</p><p id="overall-avg-rank" class="text-xl font-black text-yellow-500">-</p></div>
-                <div class="text-center"><p class="text-[10px] text-gray-400">純収支</p><p id="overall-profit" class="text-xl font-black text-green-400">±0円</p></div>
+                <div class="text-center"><p class="text-[10px] text-gray-400">対人収支</p><p id="overall-net" class="text-base font-black text-gray-300">±0円</p></div>
             </div>
-            <div class="text-center mt-3 pt-3 border-t border-gray-700"><p class="text-[10px] text-gray-400">対人収支</p><p id="overall-net" class="text-lg font-black text-gray-300">±0円</p></div>
         </div>
         <button onclick="startVisit()" class="w-full bg-yellow-500 text-black font-black py-5 rounded-2xl text-xl shadow-lg active:scale-95 transition-transform mb-4">来店開始</button>
         <div class="flex-1 overflow-y-auto">
@@ -335,7 +338,7 @@
             const totalProfit = visits.reduce((s,v) => s + (v.profit||0), 0);
             const el = document.getElementById('overall-profit');
             el.innerText = `${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}円`;
-            el.className = `text-xl font-black ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            el.className = `text-4xl font-black ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
             const totalTaijin = visits.reduce((s,v) => s + ((v.profit||0) + (v.total_pts||0)), 0);
             const elNet = document.getElementById('overall-net');
             elNet.innerText = `${totalTaijin >= 0 ? '+' : ''}${totalTaijin.toLocaleString()}円`;
