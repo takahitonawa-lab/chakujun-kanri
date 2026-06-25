@@ -37,6 +37,7 @@
         <div class="flex justify-between items-center mb-4">
             <h1 class="text-lg font-bold text-yellow-500 tracking-widest">着順管理</h1>
             <div class="flex gap-2">
+                <button id="metrics-btn" onclick="openMetrics()" class="hidden text-xs bg-gray-700 px-3 py-1 rounded">指標</button>
                 <button onclick="showView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">設定</button>
                 <button onclick="signOut()" class="text-xs bg-gray-700 px-3 py-1 rounded text-gray-400">ログアウト</button>
             </div>
@@ -213,6 +214,15 @@
         </p>
     </div>
 
+    <!-- 指標（オーナー専用・最小計測：登録累計のみ） -->
+    <div id="metrics-view" class="hidden flex flex-col h-full overflow-y-auto">
+        <div class="flex items-center gap-3 mb-4">
+            <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
+            <h2 class="text-lg font-bold">指標</h2>
+        </div>
+        <div id="metrics-content" class="flex-1"></div>
+    </div>
+
     <script>
         const SUPABASE_URL = 'https://zxrmngokgjlaoszdkoix.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_oBTUmfUKUDsAwkZc-mUbbA_0cvDiEgu';
@@ -246,6 +256,7 @@
         async function signOut() { await sb.auth.signOut(); }
 
         async function loadData() {
+            document.getElementById('metrics-btn').classList.toggle('hidden', currentUser.email !== OWNER_EMAIL);
             const { data: cfg } = await sb.from('configs').select('*').eq('user_id', currentUser.id).single();
             if (cfg) {
                 parkConfigs = cfg.park_configs || parkConfigs;
@@ -278,11 +289,96 @@
         }
 
         function showView(id) {
-            ['loading-view','login-view','home-view','start-visit-view','record-view','end-visit-view','visit-detail-view','settings-view'].forEach(v => {
+            ['loading-view','login-view','home-view','start-visit-view','record-view','end-visit-view','visit-detail-view','settings-view','metrics-view'].forEach(v => {
                 document.getElementById(v).classList.add('hidden');
             });
             document.getElementById(id).classList.remove('hidden');
             if (id === 'settings-view') renderSettings();
+        }
+
+        // ===== 指標（最小計測：登録累計のみ／オーナー専用） =====
+        // 方針: DESIGN_gambling-data-policy.md（最小計測）に準拠。
+        //  - 登録累計のみ（DAU/WAU/継続率・移動平均は作らない＝Phase Bで後置）
+        //  - データ源は auth.users を created_at で日次集計するRPC registration_daily()
+        //  - 閲覧はオーナー(OWNER_EMAIL)のみ。RPC側でもメール一致を強制（素のURL公開なし）
+        const OWNER_EMAIL = 'takahito.nawa@gmail.com';
+        // ゴールは配列。達成後に第2ゴールを足せる（例: { value: 50, label: 'ゴール②' }）
+        const METRIC_GOALS = [
+            { value: 20, label: 'ゴール①' },
+        ];
+
+        async function openMetrics() {
+            showView('metrics-view');
+            const el = document.getElementById('metrics-content');
+            el.innerHTML = '<p class="text-gray-500 text-sm text-center py-8">読み込み中...</p>';
+            const { data, error } = await sb.rpc('registration_daily');
+            if (error) {
+                el.innerHTML = `<p class="text-red-400 text-sm text-center py-8">取得エラー: ${esc(error.message || '')}<br><span class="text-gray-500 text-[10px]">metrics_registration.sql を Supabase で実行済みか確認してください</span></p>`;
+                return;
+            }
+            renderMetrics(data || []);
+        }
+
+        function renderMetrics(rows) {
+            const el = document.getElementById('metrics-content');
+            // 日次新規 → 累計系列
+            rows = (rows || []).slice().sort((a, b) => (a.day < b.day ? -1 : 1));
+            let cum = 0;
+            const series = rows.map(r => { cum += (r.cnt || 0); return { day: r.day, cum }; });
+            const total = cum;
+            const topGoal = Math.max(...METRIC_GOALS.map(g => g.value), 1);
+
+            const goalsHtml = METRIC_GOALS.map(g => {
+                const done = total >= g.value;
+                return `<div class="flex justify-between items-center text-sm py-1">
+                    <span class="text-gray-300">${esc(g.label)}（${g.value}人）</span>
+                    <span class="font-black ${done ? 'text-green-400' : 'text-gray-400'}">${done ? '達成 ✓' : `あと${g.value - total}人`}</span>
+                </div>`;
+            }).join('');
+
+            const totalCard = `<div class="bg-gray-800 rounded-xl p-4 mb-4 text-center">
+                <p class="text-[10px] text-gray-400">登録累計</p>
+                <p class="text-4xl font-black text-white">${total}<span class="text-base text-gray-400 ml-1">人</span></p>
+            </div>`;
+            const goalsCard = `<div class="bg-gray-800 rounded-xl p-4">${goalsHtml}</div>`;
+
+            if (series.length === 0) {
+                el.innerHTML = totalCard + goalsCard;
+                return;
+            }
+
+            // SVG折れ線（外部ライブラリなし）
+            const W = 320, H = 180, pl = 28, pr = 12, ptop = 12, pbot = 22;
+            const iw = W - pl - pr, ih = H - ptop - pbot;
+            const yMax = Math.max(total, topGoal) * 1.15 || 1;
+            const n = series.length;
+            const xAt = i => pl + (n === 1 ? iw / 2 : iw * i / (n - 1));
+            const yAt = v => ptop + ih * (1 - v / yMax);
+            const linePts = series.map((s, i) => `${xAt(i).toFixed(1)},${yAt(s.cum).toFixed(1)}`).join(' ');
+            const dots = series.map((s, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(s.cum).toFixed(1)}" r="2" fill="#60a5fa"/>`).join('');
+            const goalLines = METRIC_GOALS.map(g => {
+                const y = yAt(g.value).toFixed(1);
+                const c = total >= g.value ? '#34d399' : '#eab308';
+                return `<line x1="${pl}" y1="${y}" x2="${W - pr}" y2="${y}" stroke="${c}" stroke-width="1" stroke-dasharray="4 3"/>
+                    <text x="${W - pr}" y="${(parseFloat(y) - 3).toFixed(1)}" text-anchor="end" font-size="9" fill="${c}">${esc(g.label)} ${g.value}</text>`;
+            }).join('');
+            const fmtD = ds => { const d = new Date(ds); return `${d.getMonth() + 1}/${d.getDate()}`; };
+
+            const chart = `<div class="bg-gray-800 rounded-xl p-3 mb-4">
+                <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">
+                    <line x1="${pl}" y1="${ptop}" x2="${pl}" y2="${ptop + ih}" stroke="#374151" stroke-width="1"/>
+                    <line x1="${pl}" y1="${ptop + ih}" x2="${W - pr}" y2="${ptop + ih}" stroke="#374151" stroke-width="1"/>
+                    <text x="${pl - 4}" y="${ptop + 4}" text-anchor="end" font-size="9" fill="#9ca3af">${Math.ceil(yMax)}</text>
+                    <text x="${pl - 4}" y="${ptop + ih}" text-anchor="end" font-size="9" fill="#9ca3af">0</text>
+                    ${goalLines}
+                    <polyline points="${linePts}" fill="none" stroke="#60a5fa" stroke-width="2"/>
+                    ${dots}
+                    <text x="${pl}" y="${H - 6}" text-anchor="start" font-size="9" fill="#9ca3af">${fmtD(series[0].day)}</text>
+                    <text x="${W - pr}" y="${H - 6}" text-anchor="end" font-size="9" fill="#9ca3af">${fmtD(series[n - 1].day)}</text>
+                </svg>
+            </div>`;
+
+            el.innerHTML = totalCard + chart + goalsCard;
         }
 
         function showToast(msg) {
