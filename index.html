@@ -161,18 +161,18 @@
                 <p id="end-taijin" class="text-xl font-black text-gray-300">-</p>
             </div>
         </div>
-        <!-- セット型：対人収支＋セット料金を入力 → 純収支を逆算 -->
+        <!-- セット型：純収支＋セット料金を入力 → 対人収支を自動計算 -->
         <div id="set-end-card" class="hidden bg-gray-800 rounded-xl p-4 mb-4">
-            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">対人収支（対局の勝ち負け）</label>
+            <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">純収支（手残り）</label>
             <div class="flex gap-2 mb-4">
                 <button id="set-sign-btn" onclick="toggleSetSign()" class="w-16 shrink-0 rounded text-2xl font-black bg-green-600 text-white active:scale-95">＋</button>
-                <input type="number" min="0" id="visit-set-taijin" oninput="calcSetResult()" class="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center" placeholder="0">
+                <input type="number" min="0" id="visit-set-net" oninput="calcSetResult()" class="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded p-3 text-2xl font-bold text-white outline-none focus:border-yellow-500 text-center" placeholder="0">
             </div>
             <label class="text-[10px] text-gray-400 uppercase font-bold block mb-2">セット料金（場代）</label>
             <input type="number" min="0" id="visit-set-fee" oninput="calcSetResult()" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-xl font-bold text-white outline-none focus:border-yellow-500 text-center mb-3" placeholder="0">
             <div class="flex justify-between items-center pt-3 border-t border-gray-700">
-                <p class="text-xs text-gray-200 font-bold">純収支（手残り）</p>
-                <p id="set-net" class="text-3xl font-black text-green-400">-</p>
+                <p class="text-xs text-gray-300">対人収支（自動計算）</p>
+                <p id="set-taijin" class="text-lg font-black text-gray-300">-</p>
             </div>
         </div>
         <button onclick="confirmEndVisit()" class="w-full bg-yellow-500 text-black font-black py-4 rounded-2xl text-lg shadow-lg active:scale-95 transition-transform">保存して終了</button>
@@ -475,11 +475,11 @@
             document.getElementById('end-avg-rank').innerText = totalGames > 0 ? (sumRank/totalGames).toFixed(2) : '-';
             const setMode = isSetPark(currentVisit?.park_config);
             document.getElementById('visit-end-balance').value = '';
-            document.getElementById('visit-set-taijin').value = '';
+            document.getElementById('visit-set-net').value = '';
             document.getElementById('visit-set-fee').value = '';
             document.getElementById('end-net').innerText = '-';
             document.getElementById('end-taijin').innerText = '-';
-            document.getElementById('set-net').innerText = '-';
+            document.getElementById('set-taijin').innerText = '-';
             setSign = 1; applySetSignBtn();
             document.getElementById('game-end-card').classList.toggle('hidden', setMode);
             document.getElementById('set-end-card').classList.toggle('hidden', !setMode);
@@ -512,12 +512,12 @@
         }
 
         function calcSetResult() {
-            const taijin = setSign * (Math.abs(parseInt(document.getElementById('visit-set-taijin').value)) || 0);
+            const net = setSign * (Math.abs(parseInt(document.getElementById('visit-set-net').value)) || 0);
             const fee = Math.abs(parseInt(document.getElementById('visit-set-fee').value)) || 0;
-            const net = taijin - fee; // 純収支（手残り）= 対人収支 − 場代
-            const el = document.getElementById('set-net');
-            el.innerText = `${net >= 0 ? '+' : ''}${net.toLocaleString()}円`;
-            el.className = `text-3xl font-black ${net >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            const taijin = net + fee; // 対人収支 = 純収支 + 場代（自動計算・編集不可）
+            const el = document.getElementById('set-taijin');
+            el.innerText = `${taijin >= 0 ? '+' : ''}${taijin.toLocaleString()}円`;
+            el.className = `text-lg font-black ${taijin >= 0 ? 'text-green-400' : 'text-red-400'}`;
         }
 
         async function confirmEndVisit() {
@@ -527,8 +527,8 @@
             const cost = isSet ? (Math.abs(parseInt(document.getElementById('visit-set-fee').value))||0) : currentRecords.reduce((s,r)=>s+(r.pts||0),0);
             if (isSet) currentVisit.park_config = { ...currentVisit.park_config, setFee: cost };
             const endBal = isSet ? 0 : (parseInt(document.getElementById('visit-end-balance').value) || 0);
-            const setTaijin = setSign * (Math.abs(parseInt(document.getElementById('visit-set-taijin').value))||0);
-            const profit = isSet ? (setTaijin - cost) : (endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0));
+            const setNet = setSign * (Math.abs(parseInt(document.getElementById('visit-set-net').value))||0);
+            const profit = isSet ? setNet : (endBal - (currentVisit.start_balance||0) - (currentVisit.charge_total||0));
 
             await sb.from('visits').update({
                 end_balance: endBal, profit, total_games: totalGames,
@@ -649,17 +649,17 @@
                 <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm space-y-3">
                     ${setMode ? (edit ? `
                     <div>
-                        <p class="text-[10px] text-gray-400 mb-1">対人収支（対局の勝ち負け）</p>
+                        <p class="text-[10px] text-gray-400 mb-1">純収支（手残り）</p>
                         <div class="flex gap-2">
-                            <button onclick="flipSetTaijin()" class="w-14 shrink-0 rounded text-xl font-black ${taijin>=0?'bg-green-600':'bg-red-600'} text-white active:scale-95">${taijin>=0?'＋':'−'}</button>
-                            <input type="number" min="0" value="${Math.abs(taijin)}" onchange="editSetTaijin(this.value)" class="flex-1 min-w-0 bg-gray-700 p-2 rounded outline-none text-white text-center">
+                            <button onclick="flipSetNet()" class="w-14 shrink-0 rounded text-xl font-black ${profit>=0?'bg-green-600':'bg-red-600'} text-white active:scale-95">${profit>=0?'＋':'−'}</button>
+                            <input type="number" min="0" value="${Math.abs(profit)}" onchange="editSetNet(this.value)" class="flex-1 min-w-0 bg-gray-700 p-2 rounded outline-none text-white text-center">
                         </div>
                     </div>
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">セット料金（場代）</p>
                         <input type="number" min="0" value="${v.total_pts||0}" onchange="editSetFee(this.value)" class="w-full bg-gray-700 p-2 rounded outline-none text-white">
                     </div>
-                    <p class="text-[10px] text-gray-500">純収支（手残り）＝ 対人収支 − 場代 ＝ <b class="${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</b></p>
+                    <p class="text-[10px] text-gray-500">対人収支（自動計算）＝ 純収支 ＋ 場代 ＝ <b class="${taijin>=0?'text-green-400':'text-red-400'}">${taijin>=0?'+':''}${taijin.toLocaleString()}円</b></p>
                     ` : `
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">セット料金（場代）</p>
@@ -686,22 +686,18 @@
             `;
         }
 
-        // セット来店の事後編集：対人収支(符号付き)と場代を編集し純収支を逆算
-        function flipSetTaijin() {
-            const taijin = (detailVisit.profit||0) + (detailVisit.total_pts||0);
-            detailVisit.profit = (-taijin) - (detailVisit.total_pts||0);
+        // セット来店の事後編集：純収支(符号付き)と場代を編集（対人収支は常に計算結果＝編集不可）
+        function flipSetNet() {
+            detailVisit.profit = -(detailVisit.profit||0);
             renderDetailView();
         }
-        function editSetTaijin(val) {
-            const sign = ((detailVisit.profit||0) + (detailVisit.total_pts||0)) < 0 ? -1 : 1;
-            const newTaijin = sign * (Math.abs(parseInt(val)) || 0);
-            detailVisit.profit = newTaijin - (detailVisit.total_pts||0);
+        function editSetNet(val) {
+            const sign = (detailVisit.profit||0) < 0 ? -1 : 1;
+            detailVisit.profit = sign * (Math.abs(parseInt(val)) || 0);
             renderDetailView();
         }
         function editSetFee(val) {
-            const taijin = (detailVisit.profit||0) + (detailVisit.total_pts||0);
             detailVisit.total_pts = Math.abs(parseInt(val)) || 0;
-            detailVisit.profit = taijin - detailVisit.total_pts;
             renderDetailView();
         }
 
