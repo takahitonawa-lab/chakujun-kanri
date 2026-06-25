@@ -647,11 +647,24 @@
                     <div class="bg-gray-800 rounded-xl p-4 text-center"><p class="text-[10px] text-gray-400">対局数</p><p class="text-2xl font-black text-white">${detailRecords.length}</p></div>
                 </div>
                 <div class="bg-gray-800 rounded-xl p-4 mb-4 text-sm space-y-3">
-                    ${setMode ? `
+                    ${setMode ? (edit ? `
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">対人収支（対局の勝ち負け）</p>
+                        <div class="flex gap-2">
+                            <button onclick="flipSetTaijin()" class="w-14 shrink-0 rounded text-xl font-black ${taijin>=0?'bg-green-600':'bg-red-600'} text-white active:scale-95">${taijin>=0?'＋':'−'}</button>
+                            <input type="number" min="0" value="${Math.abs(taijin)}" onchange="editSetTaijin(this.value)" class="flex-1 min-w-0 bg-gray-700 p-2 rounded outline-none text-white text-center">
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-400 mb-1">セット料金（場代）</p>
+                        <input type="number" min="0" value="${v.total_pts||0}" onchange="editSetFee(this.value)" class="w-full bg-gray-700 p-2 rounded outline-none text-white">
+                    </div>
+                    <p class="text-[10px] text-gray-500">純収支（手残り）＝ 対人収支 − 場代 ＝ <b class="${profit>=0?'text-green-400':'text-red-400'}">${profit>=0?'+':''}${profit.toLocaleString()}円</b></p>
+                    ` : `
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">セット料金（場代）</p>
                         <p class="text-white">${(v.total_pts||0).toLocaleString()}円</p>
-                    </div>` : `
+                    </div>`) : `
                     <div>
                         <p class="text-[10px] text-gray-400 mb-1">入店残高</p>
                         ${edit ? `<input type="number" value="${v.start_balance||0}" onchange="detailVisit.start_balance=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('start_balance')}` : `<p class="text-white">${(v.start_balance||0).toLocaleString()}円</p>`}
@@ -671,6 +684,25 @@
                     <ul class="space-y-2">${recordsHtml}</ul>
                 </div>` : ''}
             `;
+        }
+
+        // セット来店の事後編集：対人収支(符号付き)と場代を編集し純収支を逆算
+        function flipSetTaijin() {
+            const taijin = (detailVisit.profit||0) + (detailVisit.total_pts||0);
+            detailVisit.profit = (-taijin) - (detailVisit.total_pts||0);
+            renderDetailView();
+        }
+        function editSetTaijin(val) {
+            const sign = ((detailVisit.profit||0) + (detailVisit.total_pts||0)) < 0 ? -1 : 1;
+            const newTaijin = sign * (Math.abs(parseInt(val)) || 0);
+            detailVisit.profit = newTaijin - (detailVisit.total_pts||0);
+            renderDetailView();
+        }
+        function editSetFee(val) {
+            const taijin = (detailVisit.profit||0) + (detailVisit.total_pts||0);
+            detailVisit.total_pts = Math.abs(parseInt(val)) || 0;
+            detailVisit.profit = taijin - detailVisit.total_pts;
+            renderDetailView();
         }
 
         function adjustDetailBalance(field, delta) {
