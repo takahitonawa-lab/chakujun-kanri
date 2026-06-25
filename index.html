@@ -678,6 +678,16 @@
                         ${edit ? `<input type="number" value="${v.charge_total||0}" onchange="detailVisit.charge_total=parseInt(this.value)||0;renderDetailView()" class="w-full bg-gray-700 p-2 rounded outline-none text-white">${balanceButtons('charge_total')}` : `<p class="text-white">${(v.charge_total||0).toLocaleString()}円</p>`}
                     </div>`}
                 </div>
+                ${edit ? `
+                <div class="bg-gray-800 rounded-xl p-4 mb-4">
+                    <p class="text-[10px] text-gray-400 mb-2">対局を追加（着順をタップ）</p>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="addDetailRecord(1)" class="bg-red-600 py-3 rounded-lg text-xl font-black active:scale-95">1</button>
+                        <button onclick="addDetailRecord(2)" class="bg-blue-600 py-3 rounded-lg text-xl font-black active:scale-95">2</button>
+                        <button onclick="addDetailRecord(3)" class="bg-green-600 py-3 rounded-lg text-xl font-black active:scale-95">3</button>
+                        <button onclick="addDetailRecord(4)" class="bg-gray-600 py-3 rounded-lg text-xl font-black active:scale-95">4</button>
+                    </div>
+                </div>` : ''}
                 ${detailRecords.length > 0 ? `
                 <div class="bg-gray-800 rounded-xl p-4 mb-4">
                     <p class="text-[10px] text-gray-400 mb-2">着順記録</p>
@@ -723,6 +733,25 @@
             await sb.from('records').delete().eq('id', id);
             detailRecords = detailRecords.filter(r => r.id !== id);
             renderDetailView();
+        }
+
+        // 事後編集で対局（打数）を追加。セット型は pt 加算なし、対局型はパーク設定から算出
+        async function addDetailRecord(rank) {
+            const park = detailVisit.park_config;
+            let pts = 0;
+            if (!isSetPark(park)) {
+                pts = park.base || 0;
+                if (rank === 1) pts += (park.p1 || 0);
+                if (rank === 4) pts += (park.p4 || 0);
+            }
+            const { data, error } = await sb.from('records').insert({
+                visit_id: detailVisit.id,
+                user_id: currentUser.id,
+                rank, pts,
+                created_at: new Date().toISOString()
+            }).select().single();
+            if (!error && data) { detailRecords.push(data); renderDetailView(); }
+            else showToast('追加エラー: ' + (error?.message || ''));
         }
 
         function renderSettings() {
