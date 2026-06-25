@@ -724,9 +724,12 @@
             const rec = detailRecords.find(r => r.id === id);
             if (!rec) return;
             const park = detailVisit.park_config;
-            let pts = park.base || 0;
-            if (newRank === 1) pts += (park.p1 || 0);
-            if (newRank === 4) pts += (park.p4 || 0);
+            let pts = 0;
+            if (!isSetPark(park)) {
+                pts = park.base || 0;
+                if (newRank === 1) pts += (park.p1 || 0);
+                if (newRank === 4) pts += (park.p4 || 0);
+            }
             await sb.from('records').update({ rank: newRank, pts }).eq('id', id);
             rec.rank = newRank; rec.pts = pts;
             renderDetailView();
