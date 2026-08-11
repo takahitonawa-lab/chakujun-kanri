@@ -37,6 +37,7 @@
         <div class="flex justify-between items-center mb-4">
             <h1 class="text-lg font-bold text-yellow-500 tracking-widest">着順管理</h1>
             <div class="flex gap-2">
+                <button onclick="showView('stats-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">スタッツ</button>
                 <button onclick="showView('settings-view')" class="text-xs bg-gray-700 px-3 py-1 rounded">設定</button>
                 <button onclick="signOut()" class="text-xs bg-gray-700 px-3 py-1 rounded text-gray-400">ログアウト</button>
             </div>
@@ -193,6 +194,16 @@
         <div id="visit-detail-content" class="flex-1 overflow-y-auto"></div>
     </div>
 
+    <!-- スタッツ -->
+    <div id="stats-view" class="hidden flex flex-col h-full overflow-y-auto">
+        <div class="flex items-center gap-3 mb-6">
+            <button onclick="showView('home-view')" class="text-gray-400 text-sm">← 戻る</button>
+            <h2 class="text-lg font-bold">スタッツ</h2>
+        </div>
+        <div id="stats-overall" class="mb-6"></div>
+        <div id="stats-by-store"></div>
+    </div>
+
     <!-- 設定 -->
     <div id="settings-view" class="hidden flex flex-col h-full overflow-y-auto">
         <div class="flex justify-between items-center mb-6">
@@ -227,6 +238,7 @@
         let currentVisit = null; // Supabaseに保存済みのvisitオブジェクト
         let currentRecords = [];
         let visits = [];
+        let stores = []; // 店舗マスタ（stores テーブル。パーク名を正規化した名前で自動連携）
         let lastStartBalance = 10000; // 前回の開始pt
 
         async function init() {
@@ -261,6 +273,8 @@
             }
             const { data: vs } = await sb.from('visits').select('*').eq('user_id', currentUser.id).not('ended_at', 'is', null).order('started_at', { ascending: false });
             visits = vs || [];
+            const { data: st } = await sb.from('stores').select('*').eq('user_id', currentUser.id).order('name', { ascending: true });
+            stores = st || [];
             renderHome();
             if (currentVisit) { showView('record-view'); renderRecordView(); }
             else showView('home-view');
@@ -278,11 +292,12 @@
         }
 
         function showView(id) {
-            ['loading-view','login-view','home-view','start-visit-view','record-view','end-visit-view','visit-detail-view','settings-view'].forEach(v => {
+            ['loading-view','login-view','home-view','start-visit-view','record-view','end-visit-view','visit-detail-view','settings-view','stats-view'].forEach(v => {
                 document.getElementById(v).classList.add('hidden');
             });
             document.getElementById(id).classList.remove('hidden');
             if (id === 'settings-view') renderSettings();
+            if (id === 'stats-view') loadStatsData();
         }
 
         function showToast(msg) {
@@ -294,6 +309,37 @@
         // 自由入力値を innerHTML/属性に展開する際のHTMLエスケープ（XSS防止）
         function esc(s) {
             return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+
+        // 店舗マスタ（stores）: パーク名を正規化した名前で自動的に店舗と紐づける。
+        // 表記ゆれ（前後空白・全角半角）を吸収するため NFKC 正規化 + 空白圧縮を行う。
+        function normalizeStoreName(raw) {
+            return (raw || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+        }
+        async function resolveStoreId(rawName) {
+            const norm = normalizeStoreName(rawName);
+            if (!norm) return null;
+            const existing = stores.find(s => s.name === norm);
+            if (existing) return existing.id;
+            const { data, error } = await sb.from('stores')
+                .insert({ user_id: currentUser.id, name: norm })
+                .select().single();
+            if (!error && data) { stores.push(data); return data.id; }
+            // unique制約競合などで失敗した場合は取り直して再検索
+            const { data: refetched } = await sb.from('stores').select('*').eq('user_id', currentUser.id);
+            if (refetched) {
+                stores = refetched;
+                const m = stores.find(s => s.name === norm);
+                if (m) return m.id;
+            }
+            return null;
+        }
+        function storeNameFor(v) {
+            if (v.store_id) {
+                const s = stores.find(s => s.id === v.store_id);
+                if (s) return s.name;
+            }
+            return v.park_name || '未設定';
         }
 
         // 課金タイプ判定とコスト計算
@@ -386,12 +432,14 @@
             const isSet = isSetPark(park);
             const startBal = isSet ? 0 : (parseInt(document.getElementById('visit-start-balance').value) || 0);
             if (!isSet) lastStartBalance = startBal;
+            const storeId = await resolveStoreId(park.name);
 
             // まずSupabaseにvisitを保存してUUIDを取得
             const { data: newVisit, error } = await sb.from('visits').insert({
                 user_id: currentUser.id,
                 park_name: park.name,
                 park_config: park,
+                store_id: storeId,
                 start_balance: startBal,
                 charge_total: 0,
                 started_at: new Date().toISOString()
@@ -586,8 +634,12 @@
             detailVisit.total_games = totalGames;
             detailVisit.avg_rank = avgRank;
             detailVisit.total_pts = totalPts;
+            // 店舗名を編集した場合はstoresマスタと同期（表記ゆれを正規化して自動紐付け）
+            const storeId = await resolveStoreId(detailVisit.park_name);
+            detailVisit.store_id = storeId;
             await sb.from('visits').update({
                 park_name: detailVisit.park_name,
+                store_id: storeId,
                 start_balance: detailVisit.start_balance,
                 end_balance: detailVisit.end_balance,
                 charge_total: detailVisit.charge_total,
@@ -759,6 +811,143 @@
             }).select().single();
             if (!error && data) { detailRecords.push(data); renderDetailView(); }
             else showToast('追加エラー: ' + (error?.message || ''));
+        }
+
+        // ============================================================
+        // スタッツ（着順内訳・店舗別集計）
+        // ============================================================
+        let statsVisits = []; // 終了済み来店に records（対局個票）を紐付けた配列
+        let statsSort = { key: 'games', dir: 'desc' };
+        const RANK_AVG_BASELINE = 2.50; // 四麻の理論平均着順（固定）
+
+        // 純粋関数: 来店（records付き）の配列を受け取り指標オブジェクトを返す。
+        // 全体集計・店舗別集計のどちらも、渡す配列を絞るだけで同じロジックで計算できる。
+        function computeStats(visitsList) {
+            const games = visitsList.flatMap(v => v.records || []);
+            const totalGames = games.length;
+            const rankCounts = [0, 0, 0, 0]; // [1着,2着,3着,4着]の回数
+            games.forEach(g => { if (g.rank >= 1 && g.rank <= 4) rankCounts[g.rank - 1]++; });
+            const sumRank = games.reduce((s, g) => s + g.rank, 0);
+            const avgRank = totalGames > 0 ? sumRank / totalGames : null;
+            const topRate = totalGames > 0 ? rankCounts[0] / totalGames : null;
+            const lastRate = totalGames > 0 ? rankCounts[3] / totalGames : null;
+            const rentaiRate = totalGames > 0 ? (rankCounts[0] + rankCounts[1]) / totalGames : null;
+            const lastAvoidRate = lastRate !== null ? 1 - lastRate : null;
+            // 収支（素点）= 対人スコア（ゲーム代・チャージ控除前） = profit + total_pts
+            const grossProfit = visitsList.reduce((s, v) => s + ((v.profit || 0) + (v.total_pts || 0)), 0);
+            // 収支（実質）= 純スコア（ゲーム代・チャージ控除後） = profit
+            const netProfit = visitsList.reduce((s, v) => s + (v.profit || 0), 0);
+            const perGameNet = totalGames > 0 ? netProfit / totalGames : null;
+            return {
+                visitCount: visitsList.length, totalGames, rankCounts,
+                rankRatios: rankCounts.map(c => totalGames > 0 ? c / totalGames : 0),
+                avgRank, topRate, lastRate, rentaiRate, lastAvoidRate,
+                grossProfit, netProfit, perGameNet
+            };
+        }
+
+        async function loadStatsData() {
+            document.getElementById('stats-overall').innerHTML = '<p class="text-gray-500 text-sm text-center py-8">読み込み中...</p>';
+            document.getElementById('stats-by-store').innerHTML = '';
+            const { data: recs } = await sb.from('records').select('*').eq('user_id', currentUser.id);
+            const recordsByVisit = {};
+            (recs || []).forEach(r => { (recordsByVisit[r.visit_id] ||= []).push(r); });
+            statsVisits = visits.map(v => ({ ...v, records: recordsByVisit[v.id] || [] }));
+            renderStats();
+        }
+
+        function fmtPt(n) { return `${n >= 0 ? '+' : ''}${Math.round(n).toLocaleString()}pt`; }
+        function fmtPct(r) { return r === null ? '-' : `${(r * 100).toFixed(1)}%`; }
+
+        function renderStats() {
+            document.getElementById('stats-overall').innerHTML = renderStatsCard(computeStats(statsVisits));
+            const groups = {};
+            statsVisits.forEach(v => {
+                const key = v.store_id || `unlinked:${v.park_name || '未設定'}`;
+                (groups[key] ||= { name: storeNameFor(v), visits: [] }).visits.push(v);
+            });
+            const rows = Object.values(groups).map(g => ({ name: g.name, stats: computeStats(g.visits) }));
+            document.getElementById('stats-by-store').innerHTML = renderStoreTable(rows);
+        }
+
+        function renderStatsCard(s) {
+            const rankColors = ['bg-red-600', 'bg-blue-600', 'bg-green-600', 'bg-gray-500'];
+            const barSegments = s.totalGames > 0
+                ? rankColors.map((c, i) => s.rankRatios[i] > 0 ? `<div class="${c} h-full" style="width:${(s.rankRatios[i] * 100).toFixed(2)}%"></div>` : '').join('')
+                : '';
+            const rankLines = [0, 1, 2, 3].map(i =>
+                `<div class="flex items-center gap-1 text-[11px]"><span class="w-2 h-2 rounded-full ${rankColors[i]} inline-block"></span>${i + 1}着 ${s.rankCounts[i]}回 (${fmtPct(s.rankRatios[i])})</div>`
+            ).join('');
+            const avgDiff = s.avgRank !== null ? (s.avgRank - RANK_AVG_BASELINE) : null;
+            const avgColor = avgDiff === null ? 'text-gray-400' : (avgDiff <= 0 ? 'text-green-400' : 'text-red-400');
+            return `
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <p class="text-[10px] text-gray-400 mb-2 uppercase tracking-wider">全体スタッツ（対局数 ${s.totalGames}）</p>
+                    <div class="w-full h-4 rounded-full overflow-hidden bg-gray-700 flex mb-2">${barSegments}</div>
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-1 mb-4">${rankLines}</div>
+                    <div class="flex justify-between items-center mb-4 pt-3 border-t border-gray-700">
+                        <p class="text-[10px] text-gray-400">平均着順<br><span class="text-[9px] text-gray-500">理論平均 ${RANK_AVG_BASELINE.toFixed(2)}</span></p>
+                        <p class="text-2xl font-black ${avgColor}">${s.avgRank !== null ? s.avgRank.toFixed(2) : '-'}</p>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center mb-4">
+                        <div><p class="text-[9px] text-gray-400">トップ率</p><p class="text-sm font-bold text-yellow-500">${fmtPct(s.topRate)}</p></div>
+                        <div><p class="text-[9px] text-gray-400">ラス率</p><p class="text-sm font-bold text-gray-300">${fmtPct(s.lastRate)}</p></div>
+                        <div><p class="text-[9px] text-gray-400">連対率</p><p class="text-sm font-bold text-gray-300">${fmtPct(s.rentaiRate)}</p></div>
+                        <div><p class="text-[9px] text-gray-400">ラス回避率</p><p class="text-sm font-bold text-gray-300">${fmtPct(s.lastAvoidRate)}</p></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-700 items-end">
+                        <div><p class="text-[10px] text-gray-400 mb-1">収支（素点）</p><p class="text-base font-bold ${s.grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtPt(s.grossProfit)}</p></div>
+                        <div><p class="text-[10px] text-gray-400 mb-1">収支（実質）</p><p class="text-3xl font-black ${s.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtPt(s.netProfit)}</p></div>
+                    </div>
+                </div>`;
+        }
+
+        function toggleStatsSort(key) {
+            if (statsSort.key === key) statsSort.dir = statsSort.dir === 'desc' ? 'asc' : 'desc';
+            else { statsSort.key = key; statsSort.dir = 'desc'; }
+            renderStats();
+        }
+
+        function renderStoreTable(rows) {
+            const getVal = (r, key) => key === 'games' ? r.stats.totalGames : key === 'avgRank' ? (r.stats.avgRank ?? Infinity) : r.stats.perGameNet ?? -Infinity;
+            const sorted = rows.slice().sort((a, b) => {
+                const av = getVal(a, statsSort.key), bv = getVal(b, statsSort.key);
+                return statsSort.dir === 'asc' ? av - bv : bv - av;
+            });
+            const arrow = key => statsSort.key === key ? (statsSort.dir === 'asc' ? '▲' : '▼') : '';
+            const th = (key, label) => `<th onclick="toggleStatsSort('${key}')" class="px-2 py-2 whitespace-nowrap cursor-pointer select-none">${label}${arrow(key)}</th>`;
+            const rowsHtml = sorted.map(r => `
+                <tr class="border-t border-gray-700">
+                    <td class="px-2 py-2 whitespace-nowrap font-bold">${esc(r.name)}</td>
+                    <td class="px-2 py-2 text-center">${r.stats.totalGames}</td>
+                    <td class="px-2 py-2 text-center text-yellow-500 font-bold">${r.stats.avgRank !== null ? r.stats.avgRank.toFixed(2) : '-'}</td>
+                    <td class="px-2 py-2 text-center">${fmtPct(r.stats.topRate)}</td>
+                    <td class="px-2 py-2 text-center">${fmtPct(r.stats.lastRate)}</td>
+                    <td class="px-2 py-2 text-center">${fmtPct(r.stats.rentaiRate)}</td>
+                    <td class="px-2 py-2 text-center">${fmtPct(r.stats.lastAvoidRate)}</td>
+                    <td class="px-2 py-2 text-center ${r.stats.grossProfit >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtPt(r.stats.grossProfit)}</td>
+                    <td class="px-2 py-2 text-center font-bold ${r.stats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtPt(r.stats.netProfit)}</td>
+                    <td class="px-2 py-2 text-center font-bold ${(r.stats.perGameNet ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}">${r.stats.perGameNet !== null ? fmtPt(r.stats.perGameNet) : '-'}</td>
+                </tr>`).join('');
+            return `
+                <p class="text-[10px] text-gray-400 mb-2 uppercase tracking-wider">店舗別</p>
+                <div class="bg-gray-800 rounded-xl overflow-x-auto">
+                    <table class="text-[11px] w-full min-w-[720px]">
+                        <thead class="text-gray-400"><tr>
+                            <th class="px-2 py-2 text-left whitespace-nowrap">店舗</th>
+                            ${th('games', '対局数')}
+                            ${th('avgRank', '平均着順')}
+                            <th class="px-2 py-2 whitespace-nowrap">トップ率</th>
+                            <th class="px-2 py-2 whitespace-nowrap">ラス率</th>
+                            <th class="px-2 py-2 whitespace-nowrap">連対率</th>
+                            <th class="px-2 py-2 whitespace-nowrap">ラス回避率</th>
+                            <th class="px-2 py-2 whitespace-nowrap">素点</th>
+                            <th class="px-2 py-2 whitespace-nowrap">実質収支</th>
+                            ${th('perGameNet', '実質/戦')}
+                        </tr></thead>
+                        <tbody>${rowsHtml || `<tr><td colspan="10" class="px-2 py-8 text-center text-gray-600">データがありません</td></tr>`}</tbody>
+                    </table>
+                </div>`;
         }
 
         function renderSettings() {
